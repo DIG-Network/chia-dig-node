@@ -4,7 +4,7 @@
 SERVICE_NAME="dig@service"
 SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
 USER_NAME=$(whoami)
-WORKING_DIR="/home/$USER_NAME/dig-app"
+WORKING_DIR=$(pwd)
 
 # Check if the script is being run as root
 if [ "$EUID" -ne 0 ]; then
