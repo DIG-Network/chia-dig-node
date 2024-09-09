@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Variables
-SERVICE_NAME="dig@service"
+USER_NAME=${SUDO_USER:-$(whoami)}  # Use SUDO_USER if available, otherwise fall back to whoami
+SERVICE_NAME="dig@$USER_NAME.service"
 SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
-USER_NAME=$(whoami)
 WORKING_DIR=$(pwd)
 
 # Check if the script is being run as root
@@ -11,6 +11,10 @@ if [ "$EUID" -ne 0 ]; then
   echo "Please run as root"
   exit 1
 fi
+
+# Add the current user to the Docker group
+echo "Adding $USER_NAME to the docker group..."
+usermod -aG docker "$USER_NAME"
 
 # Check if the working directory exists
 if [ ! -d "$WORKING_DIR" ]; then
@@ -61,3 +65,5 @@ echo "Checking the status of the service..."
 systemctl status "dig@$USER_NAME.service"
 
 echo "Service $SERVICE_NAME installed and activated successfully."
+
+echo "Please log out and log back in for the Docker group changes to take effect."
