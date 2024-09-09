@@ -1,0 +1,48 @@
+version: '3.8'
+services:
+  propagation-server:
+    image: dignetwork/dig-propagation-server:latest-alpha
+    ports:
+      - "4159:4159"
+    volumes:
+      - ~/.dig/remote:/.dig
+    environment:
+      - DIG_USERNAME=changeme
+      - DIG_PASSWORD=changeme
+      - DIG_FOLDER_PATH=/.dig
+      - PORT=4159
+      - REMOTE_NODE=1
+      - TRUSTED_FULLNODE=<add_ip_address_here_no_port>
+    restart: always
+
+  content-server:
+    image: dignetwork/dig-content-server:latest-alpha
+    ports:
+      - "80:80"
+    volumes:
+      - ~/.dig/remote:/.dig
+    environment:
+      - DIG_FOLDER_PATH=/.dig
+      - PORT=80
+      - REMOTE_NODE=1
+      - TRUSTED_FULLNODE=<add_ip_address_here_no_port>
+    restart: always
+
+  incentive-server:
+    image: dignetwork/dig-incentive-server:latest-alpha
+    ports:
+      - "4160:4160"
+    volumes:
+      - ~/.dig/remote:/.dig
+    environment:
+      - DIG_USERNAME=changeme
+      - DIG_PASSWORD=changeme
+      - DIG_FOLDER_PATH=/.dig
+      - PORT=4160
+      - REMOTE_NODE=1
+      - TRUSTED_FULLNODE=<add_ip_address_here_no_port>
+    restart: always
+
+networks:
+  default:
+    name: dig_network

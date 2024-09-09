@@ -1,0 +1,20 @@
+[Unit]
+Description=Dig Node Docker Compose
+Documentation=https://dig.net
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+WorkingDirectory=/home/%i/dig-app
+ExecStart=/usr/local/bin/docker-compose up
+ExecStop=/usr/local/bin/docker-compose down
+Restart=always
+
+User=%i
+Group=docker
+
+# Time to wait before forcefully stopping the container
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
