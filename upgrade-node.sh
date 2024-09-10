@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Variables
-SERVICE_NAME="dig@$(whoami).service"
+USER_NAME=${SUDO_USER:-$(whoami)}
+SERVICE_NAME="dig@$USER_NAME.service"
 
 # Check if the script is being run as root
 if [ "$EUID" -ne 0 ]; then
