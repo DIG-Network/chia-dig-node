@@ -97,6 +97,15 @@ TRUSTED_FULLNODE=${TRUSTED_FULLNODE:-"not-provided"}
 read -p "If needed, enter a PUBLIC_IP override (leave blank for auto-detection): " PUBLIC_IP
 PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
 
+# Prompt for Mercenary Mode (Yes/No) and convert to true/false
+read -p "Enable Mercenary Mode? Enabling this will allow your node to hunt for mirror offers to earn rewards (y/n): " -n 1 -r
+echo    # Move to a new line
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  MERCENARY_MODE="true"
+else
+  MERCENARY_MODE="false"
+fi
+
 # Ask user for DISK_SPACE_LIMIT_BYTES and default to 1 TB if left blank
 read -p "If needed, enter a DISK_SPACE_LIMIT_BYTES override (leave blank for 1 TB): " DISK_SPACE_LIMIT_BYTES
 DISK_SPACE_LIMIT_BYTES=${DISK_SPACE_LIMIT_BYTES:-"1099511627776"}
@@ -106,6 +115,7 @@ echo "DIG_USERNAME: $DIG_USERNAME"
 echo "DIG_PASSWORD: $DIG_PASSWORD"
 echo "TRUSTED_FULLNODE: $TRUSTED_FULLNODE"
 echo "PUBLIC_IP: $PUBLIC_IP"
+echo "MERCENARY_MODE: $MERCENARY_MODE"
 echo "These values will be used in the DIG CLI."
 
 # Explanation of the TRUSTED_FULLNODE and PUBLIC_IP
@@ -163,6 +173,7 @@ services:
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
       - PUBLIC_IP=$PUBLIC_IP
       - DISK_SPACE_LIMIT_BYTES=$DISK_SPACE_LIMIT_BYTES
+      - MERCENARY_MODE=$MERCENARY_MODE
     restart: always
 
 networks:
