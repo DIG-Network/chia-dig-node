@@ -11,6 +11,15 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to stop the service if it's running
+stop_existing_service() {
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        echo "Stopping the existing service $SERVICE_NAME..."
+        systemctl stop "$SERVICE_NAME"
+        echo "Service $SERVICE_NAME stopped."
+    fi
+}
+
 # Function to ask the user to open ports using UFW
 open_ports() {
     echo "This setup uses the following ports:"
@@ -61,6 +70,9 @@ if [ "$EUID" -ne 0 ]; then
   echo "Please run as root"
   exit 1
 fi
+
+# Stop the existing service if it is running
+stop_existing_service
 
 # Add the current user to the Docker group
 echo "Adding $USER_NAME to the docker group..."
@@ -159,6 +171,10 @@ networks:
 EOF
 
 echo "docker-compose.yml file created successfully at $DOCKER_COMPOSE_FILE."
+
+# Pull the latest Docker images
+echo "Pulling the latest Docker images..."
+docker-compose pull
 
 # Create the systemd service file
 echo "Creating systemd service file at $SERVICE_FILE_PATH..."
