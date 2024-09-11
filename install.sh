@@ -11,6 +11,37 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to ask the user to open ports using UFW
+open_ports() {
+    echo "This setup uses the following ports:"
+    echo " - Port 80: Content Server"
+    echo " - Port 4159: Propagation Server"
+    echo " - Port 4160: Incentive Server"
+    echo ""
+    
+    read -p "Do you want to open these ports (80, 4159, 4160) using UFW? (y/n): " -n 1 -r
+    echo    # Move to a new line
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if ! command_exists ufw; then
+            echo "Error: UFW is not installed."
+            exit 1
+        fi
+        
+        echo "Opening ports 80, 4159, and 4160..."
+        sudo ufw allow 80
+        sudo ufw allow 4159
+        sudo ufw allow 4160
+        sudo ufw reload
+        echo "Ports 80 (Content Server), 4159 (Propagation Server), and 4160 (Incentive Server) have been opened."
+
+        echo ""
+        echo -e "\033[1;31mIMPORTANT: You may have to open these ports on your router as well. Each router has different steps for this process.\033[0m"
+        echo ""
+    else
+        echo "Skipping port opening."
+    fi
+}
+
 # Check if Docker is installed
 if ! command_exists docker; then
   echo "Error: Docker is not installed."
@@ -54,7 +85,7 @@ TRUSTED_FULLNODE=${TRUSTED_FULLNODE:-"not-provided"}
 read -p "If needed, enter a PUBLIC_IP override (leave blank for auto-detection): " PUBLIC_IP
 PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
 
-# Ask user for PUBLIC_IP and default to "not-provided" if left blank
+# Ask user for DISK_SPACE_LIMIT_BYTES and default to 1 TB if left blank
 read -p "If needed, enter a DISK_SPACE_LIMIT_BYTES override (leave blank for 1 TB): " DISK_SPACE_LIMIT_BYTES
 DISK_SPACE_LIMIT_BYTES=${DISK_SPACE_LIMIT_BYTES:-"1099511627776"}
 
@@ -68,6 +99,9 @@ echo "These values will be used in the DIG CLI."
 # Explanation of the TRUSTED_FULLNODE and PUBLIC_IP
 echo "TRUSTED_FULLNODE is optional. It should be your own full node's public IP if applicable. Using your own node can provide better performance."
 echo "PUBLIC_IP should only be set if your network setup requires an IP override (e.g., behind BGP). Otherwise, leave it blank and the public IP will be auto-detected."
+
+# Call the function to ask if user wants to open the ports
+open_ports
 
 # Create docker-compose.yml with the provided values
 DOCKER_COMPOSE_FILE=./docker-compose.yml
@@ -166,7 +200,7 @@ systemctl start "dig@$USER_NAME.service"
 
 # Check the status of the service
 echo "Checking the status of the service..."
-systemctl status "dig@$USER_NAME.service"
+systemctl --no-pager status "dig@$USER_NAME.service"
 
 echo "Service $SERVICE_NAME installed and activated successfully."
 
