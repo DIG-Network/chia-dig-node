@@ -54,6 +54,10 @@ TRUSTED_FULLNODE=${TRUSTED_FULLNODE:-"not-provided"}
 read -p "If needed, enter a PUBLIC_IP override (leave blank for auto-detection): " PUBLIC_IP
 PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
 
+# Ask user for PUBLIC_IP and default to "not-provided" if left blank
+read -p "If needed, enter a DISK_SPACE_LIMIT_BYTES override (leave blank for 1 TB): " DISK_SPACE_LIMIT_BYTES
+DISK_SPACE_LIMIT_BYTES=${DISK_SPACE_LIMIT_BYTES:-"1099511627776"}
+
 # Echo the variables back to the user
 echo "DIG_USERNAME: $DIG_USERNAME"
 echo "DIG_PASSWORD: $DIG_PASSWORD"
@@ -112,6 +116,7 @@ services:
       - REMOTE_NODE=1
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
       - PUBLIC_IP=$PUBLIC_IP
+      - DISK_SPACE_LIMIT_BYTES=$DISK_SPACE_LIMIT_BYTES
     restart: always
 
 networks:
