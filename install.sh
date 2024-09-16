@@ -405,10 +405,6 @@ server {
         proxy_pass https://content-server:4161;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify on;
     }
 }
 EOF
