@@ -1,9 +1,10 @@
 #!/bin/bash
 
 ###############################################################################
-#                       DIG Node Setup Script
-# This script installs and configures a DIG Node with optional Nginx reverse
-# proxy. Please run this script as root.
+#                       DIG Node Setup Script with SSL
+# This script installs and configures a DIG Node with Nginx reverse proxy,
+# using HTTPS to communicate with the content server, and attaching client
+# certificates. Please run this script as root.
 ###############################################################################
 
 # Variables
@@ -50,8 +51,7 @@ open_ports() {
 
     if [[ $INCLUDE_NGINX == "yes" ]]; then
         echo " - Port 80: Reverse Proxy (HTTP)"
-        echo " - Port 443: Reverse Proxy (HTTPS, if enabled)"
-        PORTS=(80 443 4159 4160 4161)
+        PORTS=(80 4159 4160 4161)
     else
         PORTS=(4159 4160 4161)
     fi
@@ -90,7 +90,7 @@ open_ports_upnp() {
 
     # Ports to open
     if [[ $INCLUDE_NGINX == "yes" ]]; then
-        PORTS=(80 443 4159 4160 4161)
+        PORTS=(80 4159 4160 4161)
     else
         PORTS=(4159 4160 4161)
     fi
@@ -118,7 +118,7 @@ fi
 # Display script header
 echo -e "${GREEN}
 ###############################################################################
-#                       DIG Node Setup Script
+#                       DIG Node Setup Script with SSL
 ###############################################################################
 ${NC}"
 
@@ -232,7 +232,13 @@ else
 fi
 
 # Open ports using UFW
-open_ports
+read -p "Do you want to configure UFW to open necessary ports? (y/n): " -n 1 -r
+echo    # Move to a new line
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    open_ports
+else
+    echo -e "${YELLOW}Skipping UFW port configuration.${NC}"
+fi
 
 # Attempt UPnP port forwarding
 echo -e "\n${BLUE}Would you like to try to automatically set up port forwarding on your router using UPnP?${NC}"
@@ -267,6 +273,8 @@ services:
       - REMOTE_NODE=1
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
     restart: always
+    networks:
+      - dig_network
 
   content-server:
     image: dignetwork/dig-content-server:latest-alpha
@@ -280,6 +288,8 @@ services:
       - REMOTE_NODE=1
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
     restart: always
+    networks:
+      - dig_network
 
   incentive-server:
     image: dignetwork/dig-incentive-server:latest-alpha
@@ -298,6 +308,8 @@ services:
       - DISK_SPACE_LIMIT_BYTES=$DISK_SPACE_LIMIT_BYTES
       - MERCENARY_MODE=$MERCENARY_MODE
     restart: always
+    networks:
+      - dig_network
 EOF
 
 # Include Nginx reverse-proxy if selected
@@ -308,7 +320,6 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
     image: nginx:latest
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
@@ -372,9 +383,6 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
 
     echo -e "${GREEN}TLS client certificate and key generated.${NC}"
 
-    # Set up Nginx configuration
-    echo -e "\n${BLUE}Configuring Nginx...${NC}"
-
     # Prompt for hostname
     echo "Would you like to set a hostname for your server?"
     read -p "(y/n): " -n 1 -r
@@ -402,9 +410,13 @@ server {
     server_name $SERVER_NAME;
 
     location / {
-        proxy_pass http://content-server:4161;
+        proxy_pass https://content-server:4161;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_ssl_certificate /etc/nginx/certs/client.crt;
+        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
+        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
+        proxy_ssl_verify on;
     }
 }
 EOF
@@ -418,8 +430,10 @@ docker-compose pull
 
 # Create the systemd service file
 echo -e "\n${BLUE}Creating systemd service file at $SERVICE_FILE_PATH...${NC}"
-
-cat <<EOF > $SERVICE_FILE_PATH
+read -p "Do you want to create and enable the systemd service for DIG Node? (y/n): " -n 1 -r
+echo    # Move to a new line
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    cat <<EOF > $SERVICE_FILE_PATH
 [Unit]
 Description=Dig Node Docker Compose
 Documentation=https://dig.net
@@ -442,20 +456,23 @@ TimeoutStopSec=30
 WantedBy=multi-user.target
 EOF
 
-# Reload systemd daemon
-echo -e "\n${BLUE}Reloading systemd daemon...${NC}"
-systemctl daemon-reload
+    # Reload systemd daemon
+    echo -e "\n${BLUE}Reloading systemd daemon...${NC}"
+    systemctl daemon-reload
 
-# Enable and start the service
-echo -e "\n${BLUE}Enabling and starting $SERVICE_NAME service...${NC}"
-systemctl enable "$SERVICE_NAME"
-systemctl start "$SERVICE_NAME"
+    # Enable and start the service
+    echo -e "\n${BLUE}Enabling and starting $SERVICE_NAME service...${NC}"
+    systemctl enable "$SERVICE_NAME"
+    systemctl start "$SERVICE_NAME"
 
-# Check the status of the service
-echo -e "\n${BLUE}Checking the status of the service...${NC}"
-systemctl --no-pager status "$SERVICE_NAME"
+    # Check the status of the service
+    echo -e "\n${BLUE}Checking the status of the service...${NC}"
+    systemctl --no-pager status "$SERVICE_NAME"
 
-echo -e "\n${GREEN}Service $SERVICE_NAME installed and activated successfully.${NC}"
+    echo -e "\n${GREEN}Service $SERVICE_NAME installed and activated successfully.${NC}"
+else
+    echo -e "${YELLOW}Skipping systemd service creation. You can manually start the DIG Node using 'docker-compose up'${NC}"
+fi
 
 echo -e "\n${YELLOW}Please log out and log back in for the Docker group changes to take effect.${NC}"
 echo -e "${GREEN}Your DIG Node setup is complete!${NC}"
