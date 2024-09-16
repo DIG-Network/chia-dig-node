@@ -402,7 +402,7 @@ server {
     server_name $SERVER_NAME;
 
     location / {
-        proxy_pass https://content-server:4161;
+        proxy_pass http://content-server:4161;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
     }
