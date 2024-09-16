@@ -1,21 +1,129 @@
 #!/bin/bash
 
+###############################################################################
+#                       DIG Node Setup Script
+# This script installs and configures a DIG Node with optional Nginx reverse
+# proxy. Please run this script as root.
+###############################################################################
+
 # Variables
-USER_NAME=${SUDO_USER:-$(whoami)}  # Use SUDO_USER if available, otherwise fall back to whoami
-SERVICE_NAME="dig@$USER_NAME.service"
+USER_NAME=${SUDO_USER:-$(whoami)}             # User executing the script
+USER_HOME=$(eval echo "~$USER_NAME")          # Home directory of the user
+SERVICE_NAME="dig@$USER_NAME.service"         # Systemd service name
 SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
-WORKING_DIR=$(pwd)
+WORKING_DIR=$(pwd)                            # Current working directory
 
 # Required software
 REQUIRED_SOFTWARE=(docker docker-compose ufw openssl)
 
-# Function to check if a command exists
+# Color codes
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+RED='\033[1;31m'
+NC='\033[0m' # No Color
+
+###############################################################################
+#                         Function Definitions
+###############################################################################
+
+# Check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Stop the service if it's running
+stop_existing_service() {
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        echo -e "\n${YELLOW}Stopping the existing service $SERVICE_NAME...${NC}"
+        systemctl stop "$SERVICE_NAME"
+        echo -e "${GREEN}Service $SERVICE_NAME stopped.${NC}"
+    fi
+}
+
+# Open ports using UFW
+open_ports() {
+    echo -e "\n${BLUE}This setup uses the following ports:${NC}"
+    echo " - Port 4159: Propagation Server"
+    echo " - Port 4160: Incentive Server"
+    echo " - Port 4161: Content Server"
+
+    if [[ $INCLUDE_NGINX == "yes" ]]; then
+        echo " - Port 80: Reverse Proxy (HTTP)"
+        echo " - Port 443: Reverse Proxy (HTTPS, if enabled)"
+        PORTS=(80 443 4159 4160 4161)
+    else
+        PORTS=(4159 4160 4161)
+    fi
+
+    echo ""
+    read -p "Do you want to open these ports (${PORTS[*]}) using UFW? (y/n): " -n 1 -r
+    echo    # Move to a new line
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "\n${BLUE}Opening ports: ${PORTS[*]}...${NC}"
+        for PORT in "${PORTS[@]}"; do
+            ufw allow "$PORT"
+        done
+        ufw reload
+        echo -e "${GREEN}Ports have been opened in UFW.${NC}"
+    else
+        echo -e "${YELLOW}Skipping UFW port opening.${NC}"
+    fi
+}
+
+# Attempt to open ports on the router using UPnP
+open_ports_upnp() {
+    echo -e "\n${BLUE}Attempting to open ports on the router using UPnP...${NC}"
+
+    # Check if upnpc is installed
+    if ! command_exists upnpc; then
+        echo -e "${RED}Error: upnpc is not installed.${NC}"
+        echo "Please install 'upnpc' to enable UPnP port forwarding."
+        echo "Example: sudo apt-get install miniupnpc"
+        exit 1
+    fi
+
+    # Get the local IP address
+    LOCAL_IP=$(hostname -I | awk '{print $1}')
+    echo -e "Local IP address detected: ${GREEN}$LOCAL_IP${NC}"
+
+    # Ports to open
+    if [[ $INCLUDE_NGINX == "yes" ]]; then
+        PORTS=(80 443 4159 4160 4161)
+    else
+        PORTS=(4159 4160 4161)
+    fi
+
+    # Open each port using upnpc
+    for PORT in "${PORTS[@]}"; do
+        echo "Opening port $PORT..."
+        upnpc -e "DIG Node Port $PORT" -a "$LOCAL_IP" "$PORT" "$PORT" TCP
+    done
+
+    echo -e "${GREEN}UPnP port forwarding attempted.${NC}"
+    echo "Please verify that the ports have been opened on your router."
+}
+
+###############################################################################
+#                         Script Execution Begins
+###############################################################################
+
+# Ensure the script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "\n${RED}Please run this script as root.${NC}"
+    exit 1
+fi
+
+# Display script header
+echo -e "${GREEN}
+###############################################################################
+#                       DIG Node Setup Script
+###############################################################################
+${NC}"
+
 # Check for required software
-echo "Checking for required software..."
+echo -e "${BLUE}Checking for required software...${NC}"
 MISSING_SOFTWARE=()
 for SOFTWARE in "${REQUIRED_SOFTWARE[@]}"; do
     if ! command_exists "$SOFTWARE"; then
@@ -24,181 +132,133 @@ for SOFTWARE in "${REQUIRED_SOFTWARE[@]}"; do
 done
 
 if [ ${#MISSING_SOFTWARE[@]} -ne 0 ]; then
-    echo "The following required software is missing:"
+    echo -e "\n${RED}The following required software is missing:${NC}"
     for SOFTWARE in "${MISSING_SOFTWARE[@]}"; do
         echo " - $SOFTWARE"
     done
-    echo "Please install the missing software and rerun the script."
+    echo -e "\nPlease install the missing software and rerun the script."
     exit 1
 fi
-
-echo "All required software is installed."
-
-# Function to stop the service if it's running
-stop_existing_service() {
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        echo "Stopping the existing service $SERVICE_NAME..."
-        systemctl stop "$SERVICE_NAME"
-        echo "Service $SERVICE_NAME stopped."
-    fi
-}
-
-# Function to ask the user to open ports using UFW
-open_ports() {
-    echo "This setup uses the following ports:"
-    echo " - Port 80: Reverse Proxy (HTTP)"
-    echo " - Port 443: Reverse Proxy (HTTPS, if enabled)"
-    echo " - Port 4159: Propagation Server"
-    echo " - Port 4160: Incentive Server"
-    echo " - Port 4161: Content Server"
-    echo ""
-    read -p "Do you want to open these ports (80, 443, 4159, 4160, 4161) using UFW? (y/n): " -n 1 -r
-    echo    # Move to a new line
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Opening ports 80, 443, 4159, 4160, and 4161..."
-        sudo ufw allow 80
-        sudo ufw allow 443
-        sudo ufw allow 4159
-        sudo ufw allow 4160
-        sudo ufw allow 4161
-        sudo ufw reload
-        echo "Ports have been opened in UFW."
-        echo ""
-    else
-        echo "Skipping UFW port opening."
-    fi
-}
-
-# Function to attempt opening ports on the router using UPnP
-open_ports_upnp() {
-    echo "Attempting to open ports on the router using UPnP..."
-
-    # Check if upnpc is installed
-    if ! command_exists upnpc; then
-        echo "Error: upnpc is not installed."
-        echo "Please install 'upnpc' (part of the 'miniupnpc' package) to enable UPnP port forwarding."
-        echo "You can install it using your package manager. For example:"
-        echo " - On Debian/Ubuntu: sudo apt-get install miniupnpc"
-        echo " - On CentOS/Fedora: sudo yum install miniupnpc"
-        exit 1
-    fi
-
-    # Get the local IP address
-    LOCAL_IP=$(hostname -I | awk '{print $1}')
-    echo "Local IP address detected: $LOCAL_IP"
-
-    # Ports to open
-    PORTS=(80 443 4159 4160 4161)
-
-    # Open each port using upnpc
-    for PORT in "${PORTS[@]}"; do
-        echo "Opening port $PORT..."
-        upnpc -e "DIG Node Port $PORT" -a $LOCAL_IP $PORT $PORT TCP
-    done
-
-    echo "UPnP port forwarding attempted. Please verify that the ports have been opened on your router."
-}
-
-# Check if the script is being run as root
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root"
-    exit 1
-fi
+echo -e "${GREEN}All required software is installed.${NC}"
 
 # Stop the existing service if it is running
 stop_existing_service
 
 # Check if the current user is in the Docker group
 if id -nG "$USER_NAME" | grep -qw "docker"; then
-    echo "User $USER_NAME is already in the docker group."
+    echo -e "\n${GREEN}User $USER_NAME is already in the docker group.${NC}"
 else
-    echo "To work properly, your user must be added to the docker group."
+    echo -e "\n${YELLOW}To work properly, your user must be added to the docker group.${NC}"
     read -p "Would you like to add $USER_NAME to the docker group now? (y/n): " -n 1 -r
     echo    # Move to a new line
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         usermod -aG docker "$USER_NAME"
-        echo "User $USER_NAME has been added to the docker group."
+        echo -e "${GREEN}User $USER_NAME has been added to the docker group.${NC}"
     else
-        echo "User $USER_NAME must be in the docker group to proceed. Exiting."
+        echo -e "${RED}User $USER_NAME must be in the docker group to proceed. Exiting.${NC}"
+        exit 1
+    fi
+
+    # Check again if the current user is in the Docker group
+    if id -nG "$USER_NAME" | grep -qw "docker"; then
+        echo -e "${GREEN}User $USER_NAME is now in the docker group.${NC}"
+    else
+        echo -e "${RED}Failed to add $USER_NAME to the docker group. Exiting.${NC}"
         exit 1
     fi
 fi
 
-# Check again if the current user is in the Docker group
-if id -nG "$USER_NAME" | grep -qw "docker"; then
-    echo "User $USER_NAME is in the docker group."
-else
-    echo "Failed to add $USER_NAME to the docker group. Exiting."
-    exit 1
-fi
-
-# Check if the working directory exists
-if [ ! -d "$WORKING_DIR" ]; then
-    echo "Working directory $WORKING_DIR does not exist. Please create it first."
-    exit 1
-fi
-
-# Prompt user for values, but generate DIG_USERNAME and DIG_PASSWORD automatically
-echo "Generating high-entropy DIG_USERNAME and DIG_PASSWORD..."
+# Generate DIG_USERNAME and DIG_PASSWORD
+echo -e "\n${BLUE}Generating high-entropy DIG_USERNAME and DIG_PASSWORD...${NC}"
 DIG_USERNAME=$(openssl rand -hex 16)
 DIG_PASSWORD=$(openssl rand -hex 32)
+echo -e "${GREEN}Credentials generated successfully.${NC}"
 
-# Ask user for TRUSTED_FULLNODE and default to "not-provided" if left blank
-read -p "Please enter the TRUSTED_FULLNODE (your personal full node's public IP for better performance) [optional]: " TRUSTED_FULLNODE
+# Prompt for TRUSTED_FULLNODE
+echo -e "\n${BLUE}Please enter the TRUSTED_FULLNODE (optional):${NC}"
+read -p "Your personal full node's public IP for better performance (press Enter to skip): " TRUSTED_FULLNODE
 TRUSTED_FULLNODE=${TRUSTED_FULLNODE:-"not-provided"}
 
-# Ask user for PUBLIC_IP and default to "not-provided" if left blank
-read -p "If needed, enter a PUBLIC_IP override (leave blank for auto-detection): " PUBLIC_IP
+# Prompt for PUBLIC_IP
+echo -e "\n${BLUE}If needed, enter a PUBLIC_IP override (optional):${NC}"
+read -p "Leave blank for auto-detection: " PUBLIC_IP
 PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
 
-# Prompt for Mercenary Mode (Yes/No) and convert to true/false
-read -p "Enable Mercenary Mode? Enabling this will allow your node to hunt for mirror offers to earn rewards (y/n): " -n 1 -r
+# Prompt for Mercenary Mode
+echo -e "\n${BLUE}Enable Mercenary Mode?${NC}"
+echo "This allows your node to hunt for mirror offers to earn rewards."
+read -p "Do you want to enable Mercenary Mode? (y/n): " -n 1 -r
 echo    # Move to a new line
+
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     MERCENARY_MODE="true"
 else
     MERCENARY_MODE="false"
 fi
 
-# Ask user for DISK_SPACE_LIMIT_BYTES and default to 1 TB if left blank
-read -p "If needed, enter a DISK_SPACE_LIMIT_BYTES override (leave blank for 1 TB): " DISK_SPACE_LIMIT_BYTES
+# Prompt for DISK_SPACE_LIMIT_BYTES
+echo -e "\n${BLUE}Enter DISK_SPACE_LIMIT_BYTES (optional):${NC}"
+read -p "Leave blank for default (1 TB): " DISK_SPACE_LIMIT_BYTES
 DISK_SPACE_LIMIT_BYTES=${DISK_SPACE_LIMIT_BYTES:-"1099511627776"}
 
-# Echo the variables back to the user
-echo "DIG_USERNAME: $DIG_USERNAME"
-echo "DIG_PASSWORD: $DIG_PASSWORD"
-echo "TRUSTED_FULLNODE: $TRUSTED_FULLNODE"
-echo "PUBLIC_IP: $PUBLIC_IP"
-echo "MERCENARY_MODE: $MERCENARY_MODE"
-echo "These values will be used in the DIG CLI."
+# Display configuration summary
+echo -e "\n${GREEN}Configuration Summary:${NC}"
+echo "----------------------"
+echo -e "DIG_USERNAME:           ${YELLOW}$DIG_USERNAME${NC}"
+echo -e "DIG_PASSWORD:           ${YELLOW}$DIG_PASSWORD${NC}"
+echo -e "TRUSTED_FULLNODE:       ${YELLOW}$TRUSTED_FULLNODE${NC}"
+echo -e "PUBLIC_IP:              ${YELLOW}$PUBLIC_IP${NC}"
+echo -e "MERCENARY_MODE:         ${YELLOW}$MERCENARY_MODE${NC}"
+echo -e "DISK_SPACE_LIMIT_BYTES: ${YELLOW}$DISK_SPACE_LIMIT_BYTES${NC}"
+echo "----------------------"
 
-# Explanation of the TRUSTED_FULLNODE and PUBLIC_IP
-echo "TRUSTED_FULLNODE is optional. It should be your own full node's public IP if applicable."
-echo "PUBLIC_IP should only be set if your network setup requires an IP override."
+# Explain TRUSTED_FULLNODE and PUBLIC_IP
+echo -e "\n${BLUE}Note:${NC}"
+echo " - TRUSTED_FULLNODE is optional. It can be your own full node's public IP for better performance."
+echo " - PUBLIC_IP should be set if your network setup requires an IP override."
 
-# Call the function to ask if user wants to open the ports
+# Ask if the user wants to include the Nginx reverse-proxy container
+echo -e "\n${BLUE}Would you like to include the Nginx reverse-proxy container?${NC}"
+read -p "(y/n): " -n 1 -r
+echo    # Move to a new line
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    INCLUDE_NGINX="yes"
+else
+    INCLUDE_NGINX="no"
+    echo -e "\n${YELLOW}Warning:${NC} You have chosen not to include the Nginx reverse-proxy container."
+    echo -e "${YELLOW}Unless you plan on exposing port 80 in another way, your DIG Node's content server will be inaccessible to the browser.${NC}"
+fi
+
+# Open ports using UFW
 open_ports
 
-# Ask the user if they want to attempt to automatically set up port forwarding on their router
-read -p "Would you like to try to automatically set up port forwarding on your router using UPnP? (y/n): " -n 1 -r
+# Attempt UPnP port forwarding
+echo -e "\n${BLUE}Would you like to try to automatically set up port forwarding on your router using UPnP?${NC}"
+read -p "(y/n): " -n 1 -r
 echo    # Move to a new line
+
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     open_ports_upnp
 else
-    echo "Skipping automatic router port forwarding."
+    echo -e "${YELLOW}Skipping automatic router port forwarding.${NC}"
 fi
 
-# Create docker-compose.yml with the provided values
+# Create docker-compose.yml
 DOCKER_COMPOSE_FILE=./docker-compose.yml
+echo -e "\n${BLUE}Creating docker-compose.yml at $DOCKER_COMPOSE_FILE...${NC}"
+
 cat <<EOF > $DOCKER_COMPOSE_FILE
 version: '3.8'
+
 services:
   propagation-server:
     image: dignetwork/dig-propagation-server:latest-alpha
     ports:
       - "4159:4159"
     volumes:
-      - ~/.dig/remote:/.dig
+      - $USER_HOME/.dig/remote:/.dig
     environment:
       - DIG_USERNAME=$DIG_USERNAME
       - DIG_PASSWORD=$DIG_PASSWORD
@@ -213,7 +273,7 @@ services:
     ports:
       - "4161:4161"
     volumes:
-      - ~/.dig/remote:/.dig
+      - $USER_HOME/.dig/remote:/.dig
     environment:
       - DIG_FOLDER_PATH=/.dig
       - PORT=4161
@@ -226,7 +286,7 @@ services:
     ports:
       - "4160:4160"
     volumes:
-      - ~/.dig/remote:/.dig
+      - $USER_HOME/.dig/remote:/.dig
     environment:
       - DIG_USERNAME=$DIG_USERNAME
       - DIG_PASSWORD=$DIG_PASSWORD
@@ -238,6 +298,11 @@ services:
       - DISK_SPACE_LIMIT_BYTES=$DISK_SPACE_LIMIT_BYTES
       - MERCENARY_MODE=$MERCENARY_MODE
     restart: always
+EOF
+
+# Include Nginx reverse-proxy if selected
+if [[ $INCLUDE_NGINX == "yes" ]]; then
+    cat <<EOF >> $DOCKER_COMPOSE_FILE
 
   reverse-proxy:
     image: nginx:latest
@@ -245,8 +310,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ~/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
-      - ~/.dig/remote/.nginx/certs:/etc/nginx/certs
+      - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
+      - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
     depends_on:
       - content-server
     restart: always
@@ -255,89 +320,72 @@ networks:
   default:
     name: dig_network
 EOF
-
-echo "docker-compose.yml file created successfully at $DOCKER_COMPOSE_FILE."
-
-# Create Nginx configuration files in ~/.dig/remote/.nginx
-NGINX_CONF_DIR=~/.dig/remote/.nginx/conf.d
-NGINX_CERTS_DIR=~/.dig/remote/.nginx/certs
-
-mkdir -p "$NGINX_CONF_DIR"
-mkdir -p "$NGINX_CERTS_DIR"
-
-# Generate TLS client certificate and key for Nginx to use when proxying to the content server
-echo "Generating TLS client certificate and key for Nginx..."
-
-# Paths to the CA certificate and key
-CA_CERT="./ssl/ca/chia_ca.crt"
-CA_KEY="./ssl/ca/chia_ca.key"
-
-# Check if CA certificate and key exist
-if [ ! -f "$CA_CERT" ] || [ ! -f "$CA_KEY" ]; then
-    echo "Error: CA certificate or key not found in ./ssl/ca/"
-    echo "Please ensure chia_ca.crt and chia_ca.key are present in ./ssl/ca/ directory."
-    exit 1
-fi
-
-# Generate client key
-openssl genrsa -out "$NGINX_CERTS_DIR/client.key" 2048
-
-# Generate client CSR
-openssl req -new -key "$NGINX_CERTS_DIR/client.key" -subj "/CN=dig-nginx-client" -out "$NGINX_CERTS_DIR/client.csr"
-
-# Generate client certificate signed by the CA
-openssl x509 -req -in "$NGINX_CERTS_DIR/client.csr" -CA "$CA_CERT" -CAkey "$CA_KEY" -CAcreateserial -out "$NGINX_CERTS_DIR/client.crt" -days 365 -sha256
-
-# Clean up CSR
-rm "$NGINX_CERTS_DIR/client.csr"
-
-echo "TLS client certificate and key generated and stored in $NGINX_CERTS_DIR"
-
-# Ask the user if they would like to set a hostname
-read -p "Would you like to set a hostname for your server? (y/n): " -n 1 -r
-echo    # Move to a new line
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    read -p "Please enter your hostname (e.g., example.com): " HOSTNAME
-    USE_HOSTNAME="yes"
 else
-    HOSTNAME=$(hostname -I | awk '{print $1}')
-    USE_HOSTNAME="no"
-fi
+    # Close docker-compose.yml without reverse-proxy
+    cat <<EOF >> $DOCKER_COMPOSE_FILE
 
-# Generate default.conf based on hostname or IP address
-if [[ $USE_HOSTNAME == "yes" ]]; then
-    SERVER_NAME="$HOSTNAME"
-
-    # Ask if they want to set up Let's Encrypt
-    read -p "Would you like to attempt to set up Let's Encrypt for SSL certificates? (y/n): " -n 1 -r
-    echo    # Move to a new line
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Error: Let's Encrypt setup is not supported in this script."
-        echo "Please set up SSL certificates manually."
-        exit 1
-    else
-        # Use the hostname without SSL
-        cat <<EOF > "$NGINX_CONF_DIR/default.conf"
-server {
-    listen 80;
-    server_name $SERVER_NAME;
-
-    location / {
-        proxy_pass https://content-server:4161;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify on;
-    }
-}
+networks:
+  default:
+    name: dig_network
 EOF
-        echo "Nginx configuration for hostname without SSL has been created."
+fi
+
+echo -e "${GREEN}docker-compose.yml created successfully.${NC}"
+
+# Nginx setup if included
+if [[ $INCLUDE_NGINX == "yes" ]]; then
+    echo -e "\n${BLUE}Setting up Nginx reverse-proxy...${NC}"
+
+    # Nginx directories
+    NGINX_CONF_DIR="$USER_HOME/.dig/remote/.nginx/conf.d"
+    NGINX_CERTS_DIR="$USER_HOME/.dig/remote/.nginx/certs"
+
+    # Create directories
+    mkdir -p "$NGINX_CONF_DIR"
+    mkdir -p "$NGINX_CERTS_DIR"
+
+    # Generate TLS client certificate and key
+    echo -e "\n${BLUE}Generating TLS client certificate and key for Nginx...${NC}"
+
+    # Paths to the CA certificate and key
+    CA_CERT="./ssl/ca/chia_ca.crt"
+    CA_KEY="./ssl/ca/chia_ca.key"
+
+    # Check if CA certificate and key exist
+    if [ ! -f "$CA_CERT" ] || [ ! -f "$CA_KEY" ]; then
+        echo -e "${RED}Error: CA certificate or key not found in ./ssl/ca/${NC}"
+        echo "Please ensure chia_ca.crt and chia_ca.key are present in ./ssl/ca/ directory."
+        exit 1
     fi
-else
+
+    # Generate client key and certificate
+    openssl genrsa -out "$NGINX_CERTS_DIR/client.key" 2048
+    openssl req -new -key "$NGINX_CERTS_DIR/client.key" -subj "/CN=dig-nginx-client" -out "$NGINX_CERTS_DIR/client.csr"
+    openssl x509 -req -in "$NGINX_CERTS_DIR/client.csr" -CA "$CA_CERT" -CAkey "$CA_KEY" \
+    -CAcreateserial -out "$NGINX_CERTS_DIR/client.crt" -days 365 -sha256
+
+    # Clean up CSR
+    rm "$NGINX_CERTS_DIR/client.csr"
+    cp "$CA_CERT" "$NGINX_CERTS_DIR/chia_ca.crt"
+
+    echo -e "${GREEN}TLS client certificate and key generated.${NC}"
+
+    # Set up Nginx configuration
+    echo -e "\n${BLUE}Configuring Nginx...${NC}"
+
+    # Prompt for hostname
+    echo "Would you like to set a hostname for your server?"
+    read -p "(y/n): " -n 1 -r
+    echo    # Move to a new line
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "Please enter your hostname (e.g., example.com): " HOSTNAME
+    else
+        HOSTNAME=$(hostname -I | awk '{print $1}')
+    fi
+
+    # Generate Nginx configuration
     SERVER_NAME="$HOSTNAME"
-    # Use IP address in default.conf
     cat <<EOF > "$NGINX_CONF_DIR/default.conf"
 server {
     listen 80;
@@ -354,22 +402,16 @@ server {
     }
 }
 EOF
-    echo "Nginx configuration using IP address has been created."
+
+    echo -e "${GREEN}Nginx configuration has been set up at $NGINX_CONF_DIR/default.conf${NC}"
 fi
 
-# Copy CA certificate to Nginx certs directory
-cp "$CA_CERT" "$NGINX_CERTS_DIR/chia_ca.crt"
-
-echo "Nginx configuration files are located in $NGINX_CONF_DIR."
-
-echo "Please ensure your SSL certificates are correctly placed and named."
-
 # Pull the latest Docker images
-echo "Pulling the latest Docker images..."
+echo -e "\n${BLUE}Pulling the latest Docker images...${NC}"
 docker-compose pull
 
 # Create the systemd service file
-echo "Creating systemd service file at $SERVICE_FILE_PATH..."
+echo -e "\n${BLUE}Creating systemd service file at $SERVICE_FILE_PATH...${NC}"
 
 cat <<EOF > $SERVICE_FILE_PATH
 [Unit]
@@ -394,22 +436,24 @@ TimeoutStopSec=30
 WantedBy=multi-user.target
 EOF
 
-# Reload systemd to recognize the new service
-echo "Reloading systemd daemon..."
+# Reload systemd daemon
+echo -e "\n${BLUE}Reloading systemd daemon...${NC}"
 systemctl daemon-reload
 
-# Enable the service to start on boot
-echo "Enabling $SERVICE_NAME service..."
+# Enable and start the service
+echo -e "\n${BLUE}Enabling and starting $SERVICE_NAME service...${NC}"
 systemctl enable "$SERVICE_NAME"
-
-# Start the service
-echo "Starting $SERVICE_NAME service..."
 systemctl start "$SERVICE_NAME"
 
 # Check the status of the service
-echo "Checking the status of the service..."
+echo -e "\n${BLUE}Checking the status of the service...${NC}"
 systemctl --no-pager status "$SERVICE_NAME"
 
-echo "Service $SERVICE_NAME installed and activated successfully."
+echo -e "\n${GREEN}Service $SERVICE_NAME installed and activated successfully.${NC}"
 
-echo "Please log out and log back in for the Docker group changes to take effect."
+echo -e "\n${YELLOW}Please log out and log back in for the Docker group changes to take effect.${NC}"
+echo -e "${GREEN}Your DIG Node setup is complete!${NC}"
+
+###############################################################################
+#                                End of Script
+###############################################################################
