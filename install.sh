@@ -314,19 +314,21 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
     depends_on:
       - content-server
+    networks:
+      - dig_network
     restart: always
 
 networks:
-  default:
-    name: dig_network
+  dig_network:
+    driver: bridge
 EOF
 else
     # Close docker-compose.yml without reverse-proxy
     cat <<EOF >> $DOCKER_COMPOSE_FILE
 
 networks:
-  default:
-    name: dig_network
+  dig_network:
+    driver: bridge
 EOF
 fi
 
@@ -380,15 +382,23 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         read -p "Please enter your hostname (e.g., example.com): " HOSTNAME
+        USE_HOSTNAME="yes"
     else
-        HOSTNAME=$(hostname -I | awk '{print $1}')
+        USE_HOSTNAME="no"
     fi
 
     # Generate Nginx configuration
-    SERVER_NAME="$HOSTNAME"
+    if [[ $USE_HOSTNAME == "yes" ]]; then
+        SERVER_NAME="$HOSTNAME"
+        LISTEN_DIRECTIVE="listen 80;"
+    else
+        SERVER_NAME="_"
+        LISTEN_DIRECTIVE="listen 80 default_server;"
+    fi
+
     cat <<EOF > "$NGINX_CONF_DIR/default.conf"
 server {
-    listen 80;
+    $LISTEN_DIRECTIVE
     server_name $SERVER_NAME;
 
     location / {
