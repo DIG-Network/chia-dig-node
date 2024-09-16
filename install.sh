@@ -1,10 +1,11 @@
 #!/bin/bash
 
 ###############################################################################
-#                       DIG Node Setup Script with SSL
+#                       DIG Node Setup Script with SSL and Let's Encrypt
 # This script installs and configures a DIG Node with Nginx reverse proxy,
 # using HTTPS to communicate with the content server, and attaching client
-# certificates. Please run this script as root.
+# certificates. It also sets up Let's Encrypt SSL certificates if a hostname
+# is provided and the user opts in. Please run this script as root.
 ###############################################################################
 
 # Variables
@@ -15,7 +16,7 @@ SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
 WORKING_DIR=$(pwd)                            # Current working directory
 
 # Required software
-REQUIRED_SOFTWARE=(docker docker-compose ufw openssl)
+REQUIRED_SOFTWARE=(docker docker-compose ufw openssl certbot)
 
 # Color codes
 GREEN='\033[1;32m'
@@ -42,6 +43,19 @@ stop_existing_service() {
     fi
 }
 
+# Install missing software instructions
+install_missing_software() {
+    if [ -x "$(command -v apt-get)" ]; then
+        echo -e "\n${YELLOW}To install missing software on a Debian-based system (e.g., Ubuntu), run:${NC}"
+        echo "sudo apt-get update && sudo apt-get install ${MISSING_SOFTWARE[*]}"
+    elif [ -x "$(command -v yum)" ]; then
+        echo -e "\n${YELLOW}To install missing software on a RedHat-based system (e.g., CentOS), run:${NC}"
+        echo "sudo yum install ${MISSING_SOFTWARE[*]}"
+    else
+        echo -e "${RED}Package manager not detected. Please manually install the missing software.${NC}"
+    fi
+}
+
 # Open ports using UFW
 open_ports() {
     echo -e "\n${BLUE}This setup uses the following ports:${NC}"
@@ -51,7 +65,8 @@ open_ports() {
 
     if [[ $INCLUDE_NGINX == "yes" ]]; then
         echo " - Port 80: Reverse Proxy (HTTP)"
-        PORTS=(80 4159 4160 4161)
+        echo " - Port 443: Reverse Proxy (HTTPS)"
+        PORTS=(80 443 4159 4160 4161)
     else
         PORTS=(4159 4160 4161)
     fi
@@ -90,7 +105,7 @@ open_ports_upnp() {
 
     # Ports to open
     if [[ $INCLUDE_NGINX == "yes" ]]; then
-        PORTS=(80 4159 4160 4161)
+        PORTS=(80 443 4159 4160 4161)
     else
         PORTS=(4159 4160 4161)
     fi
@@ -118,7 +133,7 @@ fi
 # Display script header
 echo -e "${GREEN}
 ###############################################################################
-#                       DIG Node Setup Script with SSL
+#                       DIG Node Setup Script with SSL and Let's Encrypt
 ###############################################################################
 ${NC}"
 
@@ -136,7 +151,11 @@ if [ ${#MISSING_SOFTWARE[@]} -ne 0 ]; then
     for SOFTWARE in "${MISSING_SOFTWARE[@]}"; do
         echo " - $SOFTWARE"
     done
-    echo -e "\nPlease install the missing software and rerun the script."
+
+    # Provide installation instructions
+    install_missing_software
+
+    echo -e "\n${RED}Please install the missing software and rerun the script.${NC}"
     exit 1
 fi
 echo -e "${GREEN}All required software is installed.${NC}"
@@ -228,7 +247,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 else
     INCLUDE_NGINX="no"
     echo -e "\n${YELLOW}Warning:${NC} You have chosen not to include the Nginx reverse-proxy container."
-    echo -e "${YELLOW}Unless you plan on exposing port 80 in another way, your DIG Node's content server will be inaccessible to the browser.${NC}"
+    echo -e "${YELLOW}Unless you plan on exposing port 80/443 in another way, your DIG Node's content server will be inaccessible to the browser.${NC}"
 fi
 
 # Open ports using UFW
@@ -320,6 +339,7 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
     image: nginx:latest
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
@@ -384,7 +404,7 @@ if [[ $INCLUDE_NGINX == "yes" ]]; then
     echo -e "${GREEN}TLS client certificate and key generated.${NC}"
 
     # Prompt for hostname
-    echo "Would you like to set a hostname for your server?"
+    echo -e "\n${BLUE}Would you like to set a hostname for your server?${NC}"
     read -p "(y/n): " -n 1 -r
     echo    # Move to a new line
 
@@ -422,6 +442,128 @@ server {
 EOF
 
     echo -e "${GREEN}Nginx configuration has been set up at $NGINX_CONF_DIR/default.conf${NC}"
+
+    if [[ $USE_HOSTNAME == "yes" ]]; then
+        # Ask the user if they would like to set up Let's Encrypt
+        echo -e "\n${BLUE}Would you like to set up Let's Encrypt SSL certificates for your hostname?${NC}"
+        read -p "(y/n): " -n 1 -r
+        echo    # Move to a new line
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            SETUP_LETSENCRYPT="yes"
+
+            while true; do
+                # Provide requirements and ask for confirmation
+                echo -e "\n${YELLOW}To successfully obtain Let's Encrypt SSL certificates, please ensure the following:${NC}"
+                echo "1. Your domain name ($HOSTNAME) must be correctly configured to point to your server's public IP address."
+                echo "2. Ports 80 and 443 must be open and accessible from the internet."
+                echo "3. No other service is running on port 80 (e.g., Apache, another Nginx instance)."
+                echo -e "\nPlease make sure these requirements are met before proceeding."
+
+                read -p "Have you completed these steps? (y/n): " -n 1 -r
+                echo    # Move to a new line
+
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    echo -e "${RED}Please complete the required steps before proceeding.${NC}"
+                    read -p "Would you like to skip Let's Encrypt setup? (y/n): " -n 1 -r
+                    echo    # Move to a new line
+                    if [[ $REPLY =~ ^[Yy]$ ]]; then
+                        SETUP_LETSENCRYPT="no"
+                        break
+                    else
+                        continue
+                    fi
+                fi
+
+                # Prompt for email address for Let's Encrypt
+                read -p "Please enter your email address for Let's Encrypt notifications: " LETSENCRYPT_EMAIL
+
+                # Stop Nginx container before running certbot
+                echo -e "\n${BLUE}Stopping Nginx container to set up Let's Encrypt...${NC}"
+                docker-compose stop reverse-proxy
+
+                # Obtain SSL certificate using certbot
+                echo -e "${BLUE}Obtaining SSL certificate for $HOSTNAME...${NC}"
+                if certbot certonly --standalone -d "$HOSTNAME" --non-interactive --agree-tos --email "$LETSENCRYPT_EMAIL"; then
+                    echo -e "${GREEN}SSL certificate obtained successfully.${NC}"
+                    break
+                else
+                    echo -e "${RED}Failed to obtain SSL certificate. Please check the requirements and try again.${NC}"
+                    read -p "Would you like to try setting up Let's Encrypt again? (y/n): " -n 1 -r
+                    echo    # Move to a new line
+                    if [[ $REPLY =~ ^[Nn]$ ]]; then
+                        SETUP_LETSENCRYPT="no"
+                        break
+                    else
+                        continue
+                    fi
+                fi
+            done
+
+            if [[ $SETUP_LETSENCRYPT == "yes" ]]; then
+                # Copy the certificates to the Nginx certs directory
+                echo -e "${BLUE}Copying SSL certificates to Nginx certs directory...${NC}"
+                cp /etc/letsencrypt/live/"$HOSTNAME"/fullchain.pem "$NGINX_CERTS_DIR/fullchain.pem"
+                cp /etc/letsencrypt/live/"$HOSTNAME"/privkey.pem "$NGINX_CERTS_DIR/privkey.pem"
+
+                # Modify Nginx configuration to use SSL
+                echo -e "${BLUE}Updating Nginx configuration for SSL...${NC}"
+                cat <<EOF > "$NGINX_CONF_DIR/default.conf"
+server {
+    listen 80;
+    server_name $HOSTNAME;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name $HOSTNAME;
+
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://content-server:4161;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_ssl_certificate /etc/nginx/certs/client.crt;
+        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
+        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
+        proxy_ssl_verify off;
+    }
+}
+EOF
+
+                echo -e "${GREEN}Nginx configuration updated for SSL.${NC}"
+
+                # Start Nginx container
+                echo -e "${BLUE}Starting Nginx container...${NC}"
+                docker-compose up -d reverse-proxy
+
+                # Ask if the user wants to set up auto-renewal
+                echo -e "\n${BLUE}Would you like to set up automatic certificate renewal for Let's Encrypt?${NC}"
+                read -p "(y/n): " -n 1 -r
+                echo    # Move to a new line
+
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    # Set up cron job for certificate renewal
+                    echo -e "${BLUE}Setting up cron job for certificate renewal...${NC}"
+                    (crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --pre-hook 'docker-compose stop reverse-proxy' --post-hook 'docker-compose up -d reverse-proxy'") | crontab -
+
+                    echo -e "${GREEN}Automatic certificate renewal has been set up.${NC}"
+                else
+                    echo -e "${YELLOW}Skipping automatic certificate renewal setup.${NC}"
+                fi
+
+                echo -e "${GREEN}Let's Encrypt SSL setup complete.${NC}"
+            fi
+        else
+            SETUP_LETSENCRYPT="no"
+        fi
+    fi
 fi
 
 # Pull the latest Docker images
