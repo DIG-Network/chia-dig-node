@@ -62,13 +62,14 @@ open_ports() {
     echo " - Port 4159: Propagation Server"
     echo " - Port 4160: Incentive Server"
     echo " - Port 4161: Content Server"
+    echo " - Port 22: SSH (for remote access)"
 
     if [[ $INCLUDE_NGINX == "yes" ]]; then
         echo " - Port 80: Reverse Proxy (HTTP)"
         echo " - Port 443: Reverse Proxy (HTTPS)"
-        PORTS=(80 443 4159 4160 4161)
+        PORTS=(22 80 443 4159 4160 4161)
     else
-        PORTS=(4159 4160 4161)
+        PORTS=(22 4159 4160 4161)
     fi
 
     echo ""

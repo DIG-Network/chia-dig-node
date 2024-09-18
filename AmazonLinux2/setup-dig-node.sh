@@ -80,13 +80,14 @@ open_ports() {
     echo " - Port 4159: Propagation Server"
     echo " - Port 4160: Incentive Server"
     echo " - Port 4161: Content Server"
+    echo " - Port 22: SSH (for remote access)"
 
     if [[ $INCLUDE_NGINX == "yes" ]]; then
         echo " - Port 80: Reverse Proxy (HTTP)"
         echo " - Port 443: Reverse Proxy (HTTPS)"
-        PORTS=(80 443 4159 4160 4161)
+        PORTS=(22 80 443 4159 4160 4161)
     else
-        PORTS=(4159 4160 4161)
+        PORTS=(22 4159 4160 4161)
     fi
 
     echo ""
@@ -103,39 +104,6 @@ open_ports() {
     else
         echo -e "${YELLOW}Skipping firewalld port opening.${NC}"
     fi
-}
-
-# Attempt to open ports on the router using UPnP
-open_ports_upnp() {
-    echo -e "\n${BLUE}Attempting to open ports on the router using UPnP...${NC}"
-
-    # Check if upnpc is installed
-    if ! command_exists upnpc; then
-        echo -e "${RED}Error: upnpc is not installed.${NC}"
-        echo "Please install 'upnpc' to enable UPnP port forwarding."
-        echo "Example: sudo yum install miniupnpc -y"
-        exit 1
-    fi
-
-    # Get the local IP address
-    LOCAL_IP=$(hostname -I | awk '{print $1}')
-    echo -e "Local IP address detected: ${GREEN}$LOCAL_IP${NC}"
-
-    # Ports to open
-    if [[ $INCLUDE_NGINX == "yes" ]]; then
-        PORTS=(80 443 4159 4160 4161)
-    else
-        PORTS=(4159 4160 4161)
-    fi
-
-    # Open each port using upnpc
-    for PORT in "${PORTS[@]}"; do
-        echo "Opening port $PORT..."
-        upnpc -e "DIG Node Port $PORT" -a "$LOCAL_IP" "$PORT" "$PORT" TCP
-    done
-
-    echo -e "${GREEN}UPnP port forwarding attempted.${NC}"
-    echo "Please verify that the ports have been opened on your router."
 }
 
 ###############################################################################
@@ -282,17 +250,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     open_ports
 else
     echo -e "${YELLOW}Skipping firewalld port configuration.${NC}"
-fi
-
-# Attempt UPnP port forwarding
-echo -e "\n${BLUE}Would you like to try to automatically set up port forwarding on your router using UPnP?${NC}"
-read -p "(y/n): " -n 1 -r
-echo    # Move to a new line
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    open_ports_upnp
-else
-    echo -e "${YELLOW}Skipping automatic router port forwarding.${NC}"
 fi
 
 # Create docker-compose.yml
