@@ -36,7 +36,7 @@ check_root
 # Display script header
 echo -e "${GREEN}
 ###############################################################################
-#                       DIG Node Setup Script with SSL and Let's Encrypt
+#               DIG Node Setup Script with SSL and Let's Encrypt              #
 ###############################################################################
 ${NC}"
 
@@ -44,7 +44,7 @@ ${NC}"
 detect_distro
 
 # Detect if running on an Amazon EC2 instance
-detect_ec2
+detect_ec2   # Ensure this is called before check_software
 
 # Check for required software at the beginning
 check_software
@@ -70,6 +70,7 @@ ask_open_ports
 # Attempt to open ports using UPnP (skip if on EC2)
 if [[ $IS_EC2_INSTANCE == "yes" ]]; then
     echo -e "${YELLOW}Running on Amazon EC2 instance. Skipping UPnP port forwarding.${NC}"
+    echo -e "${YELLOW}Please ensure your AWS Security Groups are configured to allow inbound traffic on the required ports.${NC}"
 else
     ask_upnp_ports
 fi

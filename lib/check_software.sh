@@ -5,7 +5,18 @@ check_software() {
     MISSING_SOFTWARE=()
 
     # Required software list
-    REQUIRED_SOFTWARE=(docker docker-compose openssl certbot upnpc)
+    REQUIRED_SOFTWARE=(docker docker-compose openssl certbot)
+
+    # Include UPnP command check only if not running on EC2
+    if [[ $IS_EC2_INSTANCE != "yes" ]]; then
+        # Check for upnpc or miniupnpc command
+        if ! command -v upnpc >/dev/null 2>&1 && ! command -v miniupnpc >/dev/null 2>&1; then
+            MISSING_SOFTWARE+=("miniupnpc")
+            UPnP_CMD="missing"
+        else
+            UPnP_CMD=$(command -v upnpc || command -v miniupnpc)
+        fi
+    fi
 
     # Check for each required software
     for SOFTWARE in "${REQUIRED_SOFTWARE[@]}"; do

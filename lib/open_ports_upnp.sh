@@ -15,10 +15,14 @@ ask_upnp_ports() {
 open_ports_upnp() {
     echo -e "\n${BLUE}Attempting to open ports on the router using UPnP...${NC}"
 
-    # Check if upnpc (miniupnpc) is installed
-    if ! command -v upnpc >/dev/null 2>&1; then
-        echo -e "${RED}Error: 'upnpc' command not found.${NC}"
-        echo -e "${YELLOW}Please install 'miniupnpc' or 'upnpc' package and rerun the script.${NC}"
+    # Determine which UPnP command is available
+    if command -v upnpc >/dev/null 2>&1; then
+        UPnP_CMD="upnpc"
+    elif command -v miniupnpc >/dev/null 2>&1; then
+        UPnP_CMD="miniupnpc"
+    else
+        echo -e "${RED}Error: Neither 'upnpc' nor 'miniupnpc' command is available.${NC}"
+        echo -e "${YELLOW}Please install 'miniupnpc' package and rerun the script.${NC}"
         exit 1
     fi
 
@@ -37,10 +41,10 @@ open_ports_upnp() {
         PORTS=(22 4159 4160 4161)
     fi
 
-    # Open each port using upnpc
+    # Open each port using the available UPnP command
     for PORT in "${PORTS[@]}"; do
         echo -e "${YELLOW}Attempting to open port $PORT via UPnP...${NC}"
-        upnpc -e "DIG Node Port $PORT" -a "$LOCAL_IP" "$PORT" "$PORT" TCP
+        $UPnP_CMD -e "DIG Node Port $PORT" -a "$LOCAL_IP" "$PORT" "$PORT" TCP
     done
 
     echo -e "${GREEN}UPnP port forwarding attempted.${NC}"
