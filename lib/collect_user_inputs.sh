@@ -1,15 +1,33 @@
 #!/bin/bash
 
 collect_user_inputs() {
+    # Fetch public IP using the Datalayer API
+    echo -e "\n${BLUE}Fetching your public IP address...${NC}"
+    PUBLIC_IP_RESPONSE=$(curl -s https://api.datalayer.storage/user/v1/get_user_ip | jq -r '.public_ip')
+
+    if [[ -z "$PUBLIC_IP_RESPONSE" || "$PUBLIC_IP_RESPONSE" == "null" ]]; then
+        echo -e "${RED}Failed to automatically fetch your public IP address.${NC}"
+        echo -e "${YELLOW}You can manually locate your public IP by searching 'what is my IP' in a search engine, or by visiting a site like ${CYAN}https://whatismyipaddress.com${YELLOW}.${NC}"
+        read -p "Please manually enter your public IP address: " PUBLIC_IP
+        PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
+    else
+        echo -e "\n${BLUE}Detected public IP address: ${YELLOW}$PUBLIC_IP_RESPONSE${NC}"
+        read -p "Is this correct? (y/n): " -n 1 -r
+        echo    # Move to a new line
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            PUBLIC_IP="$PUBLIC_IP_RESPONSE"
+        else
+            echo -e "${YELLOW}You may need to manually enter your public IP address.${NC}"
+            read -p "Please manually enter your public IP address: " PUBLIC_IP
+            PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
+        fi
+    fi
+
     # Prompt for TRUSTED_FULLNODE
     echo -e "\n${BLUE}Please enter the TRUSTED_FULLNODE (optional):${NC}"
     read -p "Your personal full node's public IP for better performance (press Enter to skip): " TRUSTED_FULLNODE
     TRUSTED_FULLNODE=${TRUSTED_FULLNODE:-"not-provided"}
-
-    # Prompt for PUBLIC_IP
-    echo -e "\n${BLUE}If needed, enter a PUBLIC_IP override (optional):${NC}"
-    read -p "Leave blank for auto-detection: " PUBLIC_IP
-    PUBLIC_IP=${PUBLIC_IP:-"not-provided"}
 
     # Prompt for Mercenary Mode
     echo -e "\n${BLUE}Enable Mercenary Mode?${NC}"

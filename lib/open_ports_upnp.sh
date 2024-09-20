@@ -36,9 +36,9 @@ open_ports_upnp() {
 
     # Ports to open
     if [[ $INCLUDE_NGINX == "yes" ]]; then
-        PORTS=(22 80 443 4159 4160 4161)
+        PORTS=(22 80 443 4159 4160 4161 8444 8555)
     else
-        PORTS=(22 4159 4160 4161)
+        PORTS=(22 4159 4160 4161 8444 8555)
     fi
 
     # Open each port using the available UPnP command

@@ -1,5 +1,3 @@
-#!/bin/bash
-
 create_docker_compose() {
     DOCKER_COMPOSE_FILE="$PWD/docker-compose.yml"
     echo -e "\n${BLUE}Creating docker-compose.yml at $DOCKER_COMPOSE_FILE...${NC}"
@@ -61,6 +59,37 @@ services:
     networks:
       - dig_network
 EOF
+
+    # Prompt the user if they want to run a Chia FullNode
+    echo -e "${YELLOW}\nFor best performance, it's highly recommended to run a Chia FullNode with the DIG Node.${NC}"
+    echo -e "${YELLOW}However, please be aware that running a fullnode requires significant resources (CPU, memory, storage) and may take time to sync.${NC}"
+    echo -e "${YELLOW}Ensure this machine can handle it before proceeding.${NC}"
+    read -p "Would you like to run a Chia FullNode? (y/n): " -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Adding Chia FullNode to the docker-compose file...${NC}"
+        
+        cat <<EOF >> $DOCKER_COMPOSE_FILE
+
+  chia-nodes:
+    image: ghcr.io/chia-network/chia:latest
+    ports:
+      - "8444:8444"
+      - "8555:8555"
+    environment:
+      CHIA_ROOT: /chia-data
+      service: node
+      self_hostname: 0.0.0.0
+      keys: "persistent"
+    volumes:
+      - ~/.dig/chia-data:/chia-data
+    networks:
+      - dig_network
+EOF
+    else
+        echo -e "${YELLOW}Chia FullNode will not be added.${NC}"
+    fi
 
     # Include Nginx reverse-proxy if selected
     if [[ $INCLUDE_NGINX == "yes" ]]; then
