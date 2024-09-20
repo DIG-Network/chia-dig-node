@@ -1,9 +1,9 @@
 #!/bin/bash
 
 create_systemd_service() {
-    SERVICE_NAME="dig-node.service"
+    USER_NAME=${SUDO_USER:-$(whoami)} 
+    SERVICE_NAME="dig@$USER_NAME.service"
     SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
-    WORKING_DIR=$(pwd)
 
     echo -e "\n${BLUE}Creating systemd service file at $SERVICE_FILE_PATH...${NC}"
     read -p "Do you want to create and enable the systemd service for DIG Node? (y/n): " -n 1 -r
@@ -11,7 +11,7 @@ create_systemd_service() {
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         cat <<EOF > $SERVICE_FILE_PATH
 [Unit]
-Description=Dig Node Docker Compose
+Description=Dig Node Docker Compose for $USER_NAME
 After=network.target docker.service
 Requires=docker.service
 
@@ -27,6 +27,12 @@ TimeoutStopSec=30
 [Install]
 WantedBy=multi-user.target
 EOF
+
+        # Ensure the working directory exists
+        if [ ! -d "$WORKING_DIR" ]; then
+            echo -e "\n${BLUE}Creating working directory at $WORKING_DIR...${NC}"
+            mkdir -p "$WORKING_DIR"
+        fi
 
         # Reload systemd daemon
         echo -e "\n${BLUE}Reloading systemd daemon...${NC}"
@@ -46,3 +52,4 @@ EOF
         echo -e "${YELLOW}Skipping systemd service creation. You can manually start the DIG Node using 'docker-compose up'${NC}"
     fi
 }
+
