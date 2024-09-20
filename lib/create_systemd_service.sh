@@ -28,12 +28,6 @@ TimeoutStopSec=30
 WantedBy=multi-user.target
 EOF
 
-        # Ensure the working directory exists
-        if [ ! -d "$WORKING_DIR" ]; then
-            echo -e "\n${BLUE}Creating working directory at $WORKING_DIR...${NC}"
-            mkdir -p "$WORKING_DIR"
-        fi
-
         # Reload systemd daemon
         echo -e "\n${BLUE}Reloading systemd daemon...${NC}"
         systemctl daemon-reload
