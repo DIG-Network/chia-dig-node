@@ -1,6 +1,7 @@
 #!/bin/bash
 
 nginx_setup() {
+    USER_HOME=$(eval echo ~${SUDO_USER})
     if [[ $INCLUDE_NGINX == "yes" ]]; then
         echo -e "${BLUE}Setting up Nginx reverse-proxy...${NC}"
 

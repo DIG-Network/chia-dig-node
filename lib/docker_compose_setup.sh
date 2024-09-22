@@ -1,4 +1,5 @@
 create_docker_compose() {
+    USER_HOME=$(eval echo ~${SUDO_USER})
     DOCKER_COMPOSE_FILE="$PWD/docker-compose.yml"
     echo -e "\n${BLUE}Creating docker-compose.yml at $DOCKER_COMPOSE_FILE...${NC}"
 
@@ -58,6 +59,19 @@ services:
     restart: always
     networks:
       - dig_network
+
+  clamav:
+    image: mkodockx/docker-clamav:alpine
+    ports:
+      - "3310:3310"
+    volumes:
+      - $USER_HOME/.dig/remote:/.dig   # Mount the same volume as the other services
+    networks:
+      - dig_network
+    restart: always
+    environment:
+      - CLAMD_CONF_FILE=/etc/clamav/clamd.conf
+    command: "freshclam && clamd"
 EOF
 
     # Prompt the user if they want to run a Chia FullNode
