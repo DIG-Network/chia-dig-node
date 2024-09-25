@@ -3,7 +3,7 @@
 collect_user_inputs() {
     # Fetch public IP using the Datalayer API
     echo -e "\n${BLUE}Fetching your public IP address...${NC}"
-    PUBLIC_IP_RESPONSE=$(curl -s --max-time 20 --connect-timeout 10 https://api.datalayer.storage/user/v1/get_user_ip | jq -r '.public_ip')
+    PUBLIC_IP_RESPONSE=$(curl -s --max-time 20 --connect-timeout 10 https://api.datalayer.storage/user/v1/get_user_ip | grep -o '"public_ip":[^,]*' | awk -F':' '{gsub(/\"/,"",$2); print $2}')
 
     if [[ -z "$PUBLIC_IP_RESPONSE" || "$PUBLIC_IP_RESPONSE" == "null" ]]; then
         echo -e "${RED}Failed to automatically fetch your public IP address.${NC}"
