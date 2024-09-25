@@ -65,7 +65,8 @@ services:
     ports:
       - "3310:3310"
     volumes:
-      - $USER_HOME/.dig/remote:/.dig   # Mount the same volume as the other services
+      - $USER_HOME/.dig/remote/clamav_db:/var/lib/clamav
+      - $USER_HOME/.dig/remote/clamav_config:/etc/clamav
     networks:
       - dig_network
     restart: always
