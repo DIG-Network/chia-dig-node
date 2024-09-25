@@ -60,19 +60,20 @@ services:
     networks:
       - dig_network
 
-  clamav:
-    image: mkodockx/docker-clamav:alpine
-    ports:
-      - "3310:3310"
-    volumes:
-      - $USER_HOME/.dig/remote/clamav_db:/var/lib/clamav
-      - $USER_HOME/.dig/remote/clamav_config:/etc/clamav
-    networks:
-      - dig_network
-    restart: always
-    environment:
-      - CLAMD_CONF_FILE=/etc/clamav/clamd.conf
-    command: "freshclam && clamd"
+  # clamav is a content scanner that can be used to scan files for viruses and illegal content
+  # clamav:
+  #  image: mkodockx/docker-clamav:alpine
+  #  ports:
+  #    - "3310:3310"
+  #  volumes:
+  #    - $USER_HOME/.dig/remote/clamav_db:/var/lib/clamav
+  #    - $USER_HOME/.dig/remote/clamav_config:/etc/clamav
+  #  networks:
+  #    - dig_network
+  #  restart: always
+  #  environment:
+  #    - CLAMD_CONF_FILE=/etc/clamav/clamd.conf
+  #  command: "freshclam && clamd"
 EOF
 
     # Prompt the user if they want to run a Chia FullNode
