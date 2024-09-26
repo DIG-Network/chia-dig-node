@@ -3,7 +3,7 @@
 collect_user_inputs() {
     # Ask if the user has a dynamic IP
     echo -e "\n${BLUE}Do you have a dynamic IP?${NC}"
-    read -p "If you have a dynamic IP, the system will skip setting a public IP address. (y/n): " -n 1 -r
+    read -p "Press no if you want to use ip6 or you dont have a dynamic IP. (y/n): " -n 1 -r
     echo    # Move to a new line
 
     if [[ $REPLY =~ ^[Nn]$ ]]; then

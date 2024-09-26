@@ -25,6 +25,7 @@ source ./lib/docker_compose_setup.sh
 source ./lib/nginx_setup.sh
 source ./lib/pull_docker_images.sh
 source ./lib/create_systemd_service.sh
+source ./lib/setup_auto_update.sh
 
 ###############################################################################
 #                         Script Execution Begins
@@ -86,6 +87,9 @@ pull_docker_images
 
 # Create systemd service file
 create_systemd_service
+
+# Ask if the user wants to set up automatic updates
+setup_auto_update
 
 # Completion message
 echo -e "${GREEN}Your DIG Node setup is complete!${NC}"
