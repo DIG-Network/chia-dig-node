@@ -38,6 +38,17 @@ close_ports() {
     echo -e "${GREEN}UFW rules have been updated.${NC}"
 }
 
+# Function to detect the Docker Compose command
+detect_docker_compose_cmd() {
+    if command -v docker-compose >/dev/null 2>&1; then
+        echo "docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    else
+        echo ""
+    fi
+}
+
 ###############################################################################
 #                         Script Execution Begins
 ###############################################################################
@@ -92,15 +103,18 @@ if [ -f "$SERVICE_FILE_PATH" ]; then
     echo -e "${GREEN}Service $SERVICE_NAME has been stopped and disabled.${NC}"
 fi
 
+# Detect Docker Compose command
+DOCKER_COMPOSE_CMD=$(detect_docker_compose_cmd)
+
 # Check if Docker Compose is installed
-if ! command -v docker-compose >/dev/null 2>&1; then
+if [ -z "$DOCKER_COMPOSE_CMD" ]; then
     echo -e "${RED}Docker Compose is not installed. Skipping Docker services removal.${NC}"
 else
     # Stop Docker Compose services
     if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
         echo -e "${BLUE}Stopping Docker Compose services in $INSTALL_DIR...${NC}"
         cd "$INSTALL_DIR" || { echo -e "${RED}Failed to change directory to $INSTALL_DIR. Exiting.${NC}"; exit 1; }
-        docker-compose down
+        $DOCKER_COMPOSE_CMD down
     else
         echo -e "${YELLOW}No docker-compose.yml found in $INSTALL_DIR. Skipping Docker Compose services stop.${NC}"
     fi
@@ -114,7 +128,7 @@ else
         if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
             echo -e "${BLUE}Removing Docker volumes and networks...${NC}"
             cd "$INSTALL_DIR" || { echo -e "${RED}Failed to change directory to $INSTALL_DIR. Exiting.${NC}"; exit 1; }
-            docker-compose down -v --remove-orphans
+            $DOCKER_COMPOSE_CMD down -v --remove-orphans
             echo -e "${GREEN}Docker volumes and networks have been removed.${NC}"
         else
             echo -e "${YELLOW}No docker-compose.yml found in $INSTALL_DIR. Cannot remove Docker volumes and networks.${NC}"

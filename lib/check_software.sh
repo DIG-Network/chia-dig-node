@@ -3,9 +3,19 @@
 check_software() {
     echo -e "${BLUE}Checking for required software...${NC}"
     MISSING_SOFTWARE=()
+    DOCKER_COMPOSE_CMD=""
 
     # Required software list
-    REQUIRED_SOFTWARE=(docker docker-compose openssl certbot)
+    REQUIRED_SOFTWARE=(docker openssl certbot)
+
+    # Check if docker-compose or docker compose is available and set an alias for docker-compose
+    if command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="docker compose"
+    else
+        MISSING_SOFTWARE+=("docker-compose")
+    fi
 
     # Include UPnP command check only if not running on EC2
     if [[ $IS_EC2_INSTANCE != "yes" ]]; then
@@ -66,4 +76,3 @@ check_software() {
 
     echo -e "${GREEN}All required software is installed.${NC}"
 }
-

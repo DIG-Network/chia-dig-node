@@ -4,9 +4,29 @@
 USER_NAME=${SUDO_USER:-$(whoami)}
 SERVICE_NAME="dig@$USER_NAME.service"
 
+# Function to detect the Docker Compose command
+detect_docker_compose_cmd() {
+    if command -v docker-compose >/dev/null 2>&1; then
+        echo "docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    else
+        echo ""
+    fi
+}
+
+# Detect Docker Compose command
+DOCKER_COMPOSE_CMD=$(detect_docker_compose_cmd)
+
 # Check if the script is being run as root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root"
+  exit 1
+fi
+
+# Check if Docker Compose is installed
+if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+  echo "Docker Compose is not installed. Exiting..."
   exit 1
 fi
 
@@ -19,9 +39,9 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# Pull the latest Docker images using docker-compose
+# Pull the latest Docker images using the detected Docker Compose command
 echo "Pulling latest Docker images..."
-docker-compose pull
+$DOCKER_COMPOSE_CMD pull
 
 if [ $? -ne 0 ]; then
   echo "Failed to pull latest Docker images. Exiting..."

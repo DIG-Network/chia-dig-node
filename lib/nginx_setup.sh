@@ -177,7 +177,7 @@ EOF
 
                     # Start Nginx container
                     echo -e "${BLUE}Starting Nginx container...${NC}"
-                    docker-compose up -d reverse-proxy
+                    $DOCKER_COMPOSE_CMD up -d reverse-proxy
 
                     # Ask if the user wants to set up auto-renewal
                     echo -e "\n${BLUE}Would you like to set up automatic certificate renewal for Let's Encrypt?${NC}"

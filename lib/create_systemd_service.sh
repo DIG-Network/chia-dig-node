@@ -9,6 +9,7 @@ create_systemd_service() {
     echo -e "\n${BLUE}Creating systemd service file at $SERVICE_FILE_PATH...${NC}"
     read -p "Do you want to create and enable the systemd service for DIG Node? (y/n): " -n 1 -r
     echo    # Move to a new line
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         cat <<EOF > $SERVICE_FILE_PATH
 [Unit]
@@ -18,8 +19,8 @@ Requires=docker.service
 
 [Service]
 WorkingDirectory=$WORKING_DIR
-ExecStart=$(command -v docker-compose) up
-ExecStop=$(command -v docker-compose) down
+ExecStart=$DOCKER_COMPOSE_CMD up
+ExecStop=$DOCKER_COMPOSE_CMD down
 Restart=always
 User=$USER_NAME
 Group=docker
@@ -44,7 +45,6 @@ EOF
 
         echo -e "\n${GREEN}Service $SERVICE_NAME installed and activated successfully.${NC}"
     else
-        echo -e "${YELLOW}Skipping systemd service creation. You can manually start the DIG Node using 'docker-compose up'${NC}"
+        echo -e "${YELLOW}Skipping systemd service creation. You can manually start the DIG Node using '$DOCKER_COMPOSE_CMD up'${NC}"
     fi
 }
-
