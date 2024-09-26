@@ -18,6 +18,8 @@ ask_open_ports() {
     fi
 
     echo ""
+    echo "This install script can automatically attempt to configure your ports."
+    echo "If you do not like this port configuration, you can input No and configure the ports manually."
     read -p "Do you want to open these ports (${PORTS[*]}) using the firewall? (y/n): " -n 1 -r
     echo    # Move to a new line
 

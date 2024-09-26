@@ -1,6 +1,9 @@
 #!/bin/bash
 
 ask_upnp_ports() {
+    echo "In addition to the firewall, you may need to open ports on your router."
+    echo "Some routers can automatically open ports using UPnP."
+    echo "If you do not like this port configuration, you can input No and configure the ports manually."
     echo -e "\n${BLUE}Would you like to try to automatically set up port forwarding on your router using UPnP?${NC}"
     read -p "(y/n): " -n 1 -r
     echo    # Move to a new line
