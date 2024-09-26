@@ -25,7 +25,7 @@ check_software() {
         fi
     done
 
-    # If any software is missing, inform the user and exit
+    # If any software is missing, inform the user and provide instructions
     if [ ${#MISSING_SOFTWARE[@]} -ne 0 ]; then
         echo -e "${RED}The following required software is missing:${NC}"
         for SOFTWARE in "${MISSING_SOFTWARE[@]}"; do
@@ -33,6 +33,14 @@ check_software() {
         done
 
         echo -e "\n${YELLOW}Please install the missing software using your package manager and rerun the script.${NC}"
+
+        for SOFTWARE in "${MISSING_SOFTWARE[@]}"; do
+            if [[ "$SOFTWARE" == "docker" || "$SOFTWARE" == "docker-compose" ]]; then
+                echo -e "${YELLOW}To install Docker and Docker Compose, follow the instructions here:${NC}"
+                echo -e "${CYAN}https://wiki.crowncloud.net/?How_to_Install_and_use_Docker_Compose_on_Ubuntu_24_04${NC}"
+            fi
+        done
+
         echo -e "${YELLOW}For example:${NC}"
 
         case $PACKAGE_MANAGER in
@@ -58,3 +66,4 @@ check_software() {
 
     echo -e "${GREEN}All required software is installed.${NC}"
 }
+
