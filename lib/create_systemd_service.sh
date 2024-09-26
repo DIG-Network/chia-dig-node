@@ -1,6 +1,7 @@
 #!/bin/bash
 
 create_systemd_service() {
+    WORKING_DIR=$(pwd)
     USER_NAME=${SUDO_USER:-$(whoami)} 
     SERVICE_NAME="dig@$USER_NAME.service"
     SERVICE_FILE_PATH="/etc/systemd/system/$SERVICE_NAME"
