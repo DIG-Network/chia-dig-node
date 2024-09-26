@@ -24,8 +24,8 @@ Ensure that your system meets the following prerequisites:
 If the required software is not installed, install it using your system’s package manager. Below are installation commands for **Ubuntu**:
 
 ```bash
-sudo apt-get update
-sudo apt-get install docker docker-compose ufw openssl certbot nginx -y
+sudo apt update
+sudo apt install docker docker-compose ufw openssl certbot nginx -y
 ```
 
 For **CentOS** or **RHEL**:
@@ -157,7 +157,7 @@ If you want to expose your content server over HTTP/HTTPS with Nginx, follow the
 1. **Install Nginx**:
 
    ```bash
-   sudo apt-get install nginx -y
+   sudo apt install nginx -y
    ```
 
 2. **Configure Nginx Reverse Proxy**:
@@ -193,7 +193,7 @@ To secure your Nginx reverse proxy with HTTPS, use Let’s Encrypt:
 1. **Install Certbot**:
 
    ```bash
-   sudo apt-get install certbot python3-certbot-nginx -y
+   sudo apt install certbot python3-certbot-nginx -y
    ```
 
 2. **Obtain an SSL Certificate**:

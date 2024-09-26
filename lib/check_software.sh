@@ -36,8 +36,8 @@ check_software() {
         echo -e "${YELLOW}For example:${NC}"
 
         case $PACKAGE_MANAGER in
-            apt-get)
-                echo "sudo apt-get update && sudo apt-get install -y ${MISSING_SOFTWARE[*]}"
+            apt)
+                echo "sudo apt update && sudo apt install -y ${MISSING_SOFTWARE[*]}"
                 ;;
             yum)
                 echo "sudo yum install -y ${MISSING_SOFTWARE[*]}"

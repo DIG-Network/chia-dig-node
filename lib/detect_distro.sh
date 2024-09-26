@@ -9,8 +9,8 @@ detect_distro() {
 
     case $DISTRO in
         ubuntu|debian)
-            PACKAGE_MANAGER="apt-get"
-            INSTALL_CMD="sudo apt-get install -y"
+            PACKAGE_MANAGER="apt"
+            INSTALL_CMD="sudo apt install -y"
             FIREWALL="ufw"
             REQUIRED_SOFTWARE=(docker docker-compose ufw openssl certbot)
             ;;
