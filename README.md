@@ -82,14 +82,14 @@ ssl/
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/dig-node-setup.git
-   cd dig-node-setup
+   git clone https://github.com/DIG-Network/chia-dig-node.git
+   cd chia-dig-node
    ```
 
 2. **Ensure Executable Permissions**
 
    ```bash
-   chmod +x setup-dig-node.sh
+   chmod +x install.sh
    chmod +x lib/*.sh
    ```
 
@@ -102,14 +102,14 @@ ssl/
 Run the main setup script as the root user:
 
 ```bash
-sudo ./setup-dig-node.sh
+sudo ./install.sh
 ```
 
 The script will guide you through the setup process with interactive prompts.
 
 ## Script Descriptions
 
-### 1. **Main Script (`setup-dig-node.sh`)**
+### 1. **Main Script (`install.sh`)**
 
 The primary script that orchestrates the setup process by calling functions from the scripts in the `lib/` directory.
 
@@ -203,8 +203,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-**Note**: Replace `https://github.com/yourusername/dig-node-setup.git` with the actual URL of your repository.
-
 ## Troubleshooting
 
 - **Missing Software Dependencies**: If the script exits due to missing software, install the required packages using your distribution's package manager.
@@ -219,7 +217,7 @@ Contributions are welcome! Please submit pull requests or open issues for any bu
 
 ## Contact
 
-For questions or support, please contact [your-email@example.com](mailto:your-email@example.com).
+For questions or support, please contact [@digdotnet](https://x.com/digdotnet).
 
 ---
 
