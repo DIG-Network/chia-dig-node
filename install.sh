@@ -12,7 +12,7 @@
 source ./lib/colors.sh
 source ./lib/check_root.sh
 source ./lib/detect_distro.sh
-source ./lib/detect_ec2.sh        # Include EC2 detection
+source ./lib/detect_cloud_vm.sh 
 source ./lib/check_software.sh
 source ./lib/docker_group.sh
 source ./lib/stop_existing_service.sh
@@ -44,8 +44,8 @@ ${NC}"
 # Detect the distribution and set package manager and service commands
 detect_distro
 
-# Detect if running on an Amazon EC2 instance
-detect_ec2   # Ensure this is called before check_software
+# Detect if running on an Cloud virtual machine
+detect_cloud_vm   # Ensure this is called before check_software
 
 # Check for required software at the beginning
 check_software
@@ -69,9 +69,9 @@ ask_include_nginx
 ask_open_ports
 
 # Attempt to open ports using UPnP (skip if on EC2)
-if [[ $IS_EC2_INSTANCE == "yes" ]]; then
-    echo -e "${YELLOW}Running on Amazon EC2 instance. Skipping UPnP port forwarding.${NC}"
-    echo -e "${YELLOW}Please ensure your AWS Security Groups are configured to allow inbound traffic on the required ports.${NC}"
+if [[ $IS_CLOUD_VM == "yes" ]]; then
+    echo -e "${YELLOW}Running on Cloud VM instance. Skipping UPnP port forwarding.${NC}"
+    echo -e "${YELLOW}Please ensure your Security Groups are configured to allow inbound traffic on the required ports.${NC}"
 else
     ask_upnp_ports
 fi
