@@ -18,7 +18,7 @@ check_software() {
     fi
 
     # Include UPnP command check only if not running on EC2
-    if [[ $IS_EC2_INSTANCE != "yes" ]]; then
+    if [[ $IS_CLOUD_VM != "yes" ]]; then
         # Check for upnpc or miniupnpc command
         if ! command -v upnpc >/dev/null 2>&1 && ! command -v miniupnpc >/dev/null 2>&1; then
             MISSING_SOFTWARE+=("miniupnpc")
