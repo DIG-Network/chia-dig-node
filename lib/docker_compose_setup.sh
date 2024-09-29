@@ -42,6 +42,16 @@ services:
     networks:
       - dig_network
 
+  clvm:
+    image: dignetwork/clvm-execution-env:latest-alpha
+    ports:
+      - "4163:4163"
+    environment:
+      - PORT=4163
+    restart: always
+    networks:
+      - dig_network
+
   incentive-server:
     image: dignetwork/dig-incentive-server:latest-alpha
     ports:
