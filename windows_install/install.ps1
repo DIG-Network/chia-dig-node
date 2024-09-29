@@ -513,16 +513,16 @@ Write-ColorOutput Green "docker-compose.yml file created successfully."
 # Ask if the user wants to include Nginx reverse proxy
 Ask-IncludeNginx
 
-# Setup Nginx reverse proxy if chosen
-if ($INCLUDE_NGINX -eq "yes") {
-    Setup-NginxReverseProxy
-}
-
 # Call the function to ask about opening ports
 Ask-OpenPorts
 
 # Ask about UPnP port forwarding
 Ask-UPnPPorts
+
+# Setup Nginx reverse proxy if chosen
+if ($INCLUDE_NGINX -eq "yes") {
+    Setup-NginxReverseProxy
+}
 
 # Pull latest Docker images
 Write-ColorOutput Cyan "Pulling latest Docker images..."
