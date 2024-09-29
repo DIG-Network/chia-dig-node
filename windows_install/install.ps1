@@ -488,17 +488,20 @@ services:
 
 if ($trustedFullNode) {
     $dockerComposeContent += @"
+
       - TRUSTED_FULL_NODE=$trustedFullNode
 "@
 }
 
 if ($mercenaryMode -eq "y") {
     $dockerComposeContent += @"
+
       - MERCENARY_MODE=1
 "@
 }
 
 $dockerComposeContent += @"
+
     restart: always
 "@
 
