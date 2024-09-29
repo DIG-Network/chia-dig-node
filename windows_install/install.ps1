@@ -252,10 +252,9 @@ function Open-Ports {
         [array]$Ports
     )
     
-    foreach ($Port in $Ports) {
-        Write-ColorOutput Yellow "Opening port $Port in Windows Firewall..."
-        New-NetFirewallRule -DisplayName "DIG Node Port $Port" -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow
-    }
+    $portsString = $Ports -join ","
+    Write-ColorOutput Yellow "Opening ports $portsString in Windows Firewall..."
+    New-NetFirewallRule -DisplayName "DIG Node Ports" -Direction Inbound -Protocol TCP -LocalPort $Ports -Action Allow
     Write-ColorOutput Green "Ports opened successfully in Windows Firewall."
 }
 
@@ -293,7 +292,7 @@ function Ask-OpenPorts {
 function Ask-IncludeNginx {
     Write-Host "We need to set up a reverse proxy to your DIG Node's content server."
     Write-Host "If you already have a reverse proxy setup, such as IIS or another Nginx instance,"
-    Write-Host "You should skip this and manually set up port 80 and port 443 to map to your DIG Node's content server at port 4161."
+    Write-Host "you should skip this and manually set up port 80 and port 443 to map to your DIG Node's content server at port 4161."
     Write-ColorOutput Blue "Would you like to include the Nginx reverse-proxy setup?"
     $reply = Read-Host "(y/n)"
 
@@ -428,9 +427,11 @@ Write-ColorOutput Green "Credentials generated successfully."
 
 # Collect user inputs
 Write-ColorOutput Cyan "Collecting user inputs..."
-$trustedFullNode = Read-Host "Enter the IP address of your trusted full node (optional, ENTER to skip)"
+$trustedFullNode = Read-Host "Enter the IP address of your trusted full node (optional, ENTER to use localnode)"
 $publicIP = Read-Host "Enter your public IP address (optional)"
-$mercenaryMode = Read-Host "Enable Mercenary Mode? (y/n)"
+$mercenaryMode = Read-Host "Enable Mercenary Mode (auto-mirror stores based on profitability)? (y/N)"
+$mercenaryMode = if ($mercenaryMode -eq "y" -or $mercenaryMode -eq "Y") { "y" } else { "n" }
+
 $diskSpaceLimit = Read-Host "Enter disk space limit in GB (default: 1024)"
 
 if ([string]::IsNullOrWhiteSpace($diskSpaceLimit)) {

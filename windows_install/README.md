@@ -24,6 +24,8 @@ You can set up the DIG Node on your Windows system using one of the following me
    cd chia-dig-node/windows_install
    ```
 
+4. Copy your `chia_ca.crt` and `chia_ca.key` files to `windows_install/ssl/ca/` directory.
+
 ### Option 2: Downloading Individual Files
 
 If you prefer not to clone the entire repository, you can download the necessary files individually:
@@ -32,6 +34,7 @@ If you prefer not to clone the entire repository, you can download the necessary
    - `install.ps1`
    - `upgrade-node.ps1`
 2. Save these files in a new folder on your Windows system.
+3. Create the `ssl/ca` directories and copy your `chia_ca.crt` and `chia_ca.key` files to it.
 
 ## Automated Setup
 
