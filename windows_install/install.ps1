@@ -359,7 +359,7 @@ function Open-PortsUPnP {
             $mappings.Add($port, "TCP", $port, $localIP, $true, "DIG Node Port $port")
             Write-ColorOutput Green "Successfully opened port $port."
         } catch {
-            Write-ColorOutput Red "Failed to open port $port: $_"
+            Write-ColorOutput Red "Failed to open port ${port}: $_"
         }
     }
 
@@ -389,11 +389,9 @@ function Check-Software {
     
     try {
         $null = Invoke-Expression $Command 2>&1
-        Write-ColorOutput Green "$Name is installed."
         return $true
     }
     catch {
-        Write-ColorOutput Red "$Name is not installed or not in PATH."
         return $false
     }
 }
@@ -404,7 +402,12 @@ $dockerInstalled = Check-Software "Docker" "docker --version"
 $nssmInstalled = Check-Software "NSSM" "nssm version"
 
 if (-not $dockerInstalled -or -not $nssmInstalled) {
-    Write-ColorOutput Red "Please install the missing software and try again."
+    if (-not $dockerInstalled) {
+        Write-ColorOutput Red "Docker is not installed. Please install Docker and try again."
+    }
+    if (-not $nssmInstalled) {
+        Write-ColorOutput Red "NSSM (Non-Sucking Service Manager) is not installed. Please install NSSM and try again."
+    }
     exit 1
 }
 
@@ -425,7 +428,7 @@ Write-ColorOutput Green "Credentials generated successfully."
 
 # Collect user inputs
 Write-ColorOutput Cyan "Collecting user inputs..."
-$trustedFullNode = Read-Host "Enter the IP address of your trusted full node (optional)"
+$trustedFullNode = Read-Host "Enter the IP address of your trusted full node (optional, ENTER to skip)"
 $publicIP = Read-Host "Enter your public IP address (optional)"
 $mercenaryMode = Read-Host "Enable Mercenary Mode? (y/n)"
 $diskSpaceLimit = Read-Host "Enter disk space limit in GB (default: 1024)"
