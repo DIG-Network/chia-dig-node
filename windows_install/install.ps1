@@ -252,10 +252,36 @@ function Open-Ports {
         [array]$Ports
     )
     
+    $ruleName = "DIG Node Ports"
     $portsString = $Ports -join ","
+    
+    # Check if the rule already exists
+    $existingRule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+
+    if ($existingRule) {
+        Write-ColorOutput Yellow "A firewall rule named '$ruleName' already exists."
+        $overwrite = Read-Host "Do you want to overwrite it? (y/n)"
+        
+        if ($overwrite -match "^[Yy]$") {
+            # Remove the existing rule
+            Remove-NetFirewallRule -DisplayName $ruleName
+            Write-ColorOutput Yellow "Existing rule removed."
+        } else {
+            Write-ColorOutput Yellow "Keeping existing firewall rule. New rule will not be created."
+            return
+        }
+    }
+
     Write-ColorOutput Yellow "Opening ports $portsString in Windows Firewall..."
-    New-NetFirewallRule -DisplayName "DIG Node Ports" -Direction Inbound -Protocol TCP -LocalPort $Ports -Action Allow
-    Write-ColorOutput Green "Ports opened successfully in Windows Firewall."
+    
+    try {
+        New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $Ports -Action Allow -ErrorAction Stop
+        Write-ColorOutput Green "Ports opened successfully in Windows Firewall."
+    }
+    catch {
+        Write-ColorOutput Red "Failed to create firewall rule: $_"
+        Write-ColorOutput Yellow "You may need to manually configure the Windows Firewall to allow these ports."
+    }
 }
 
 # Function to ask about opening ports
@@ -395,18 +421,38 @@ function Check-Software {
     }
 }
 
+# Function to check if Docker is running
+function Is-DockerRunning {
+    try {
+        $dockerInfo = docker info 2>&1
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
 # Check for required software
 Write-ColorOutput Cyan "Checking for required software..."
 $dockerInstalled = Check-Software "Docker" "docker --version"
 $nssmInstalled = Check-Software "NSSM" "nssm version"
 
-if (-not $dockerInstalled -or -not $nssmInstalled) {
-    if (-not $dockerInstalled) {
-        Write-ColorOutput Red "Docker is not installed. Please install Docker and try again."
-    }
-    if (-not $nssmInstalled) {
-        Write-ColorOutput Red "NSSM (Non-Sucking Service Manager) is not installed. Please install NSSM and try again."
-    }
+$missingRequirements = $false
+
+if (-not $dockerInstalled) {
+    Write-ColorOutput Red "Docker is not installed. Please install Docker and try again."
+    $missingRequirements = $true
+}
+elseif (-not (Is-DockerRunning)) {
+    Write-ColorOutput Red "Docker is installed but not running. Please start Docker Desktop and try again."
+    $missingRequirements = $true
+}
+
+if (-not $nssmInstalled) {
+    Write-ColorOutput Red "NSSM (Non-Sucking Service Manager) is not installed. Please install NSSM and try again."
+    $missingRequirements = $true
+}
+
+if ($missingRequirements) {
     exit 1
 }
 
