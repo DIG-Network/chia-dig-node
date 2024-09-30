@@ -24,7 +24,7 @@ You can set up the DIG Node on your Windows system using one of the following me
    cd chia-dig-node/windows_install
    ```
 
-4. Copy your `chia_ca.crt` and `chia_ca.key` files to `windows_install/ssl/ca/` directory.
+4. Copy your `chia_ca.crt` and `chia_ca.key` files to `windows_install/ssl/ca/` directory. These files are found in your `.chia/mainnet/config/ssl/ca` directory after you have generated a wallet.
 
 ### Option 2: Downloading Individual Files
 
@@ -34,7 +34,7 @@ If you prefer not to clone the entire repository, you can download the necessary
    - `install.ps1`
    - `upgrade-node.ps1`
 2. Save these files in a new folder on your Windows system.
-3. Create the `ssl/ca` directories and copy your `chia_ca.crt` and `chia_ca.key` files to it.
+3. Create the `ssl/ca` directories and copy your `chia_ca.crt` and `chia_ca.key` files to it. These files are found in your `.chia/mainnet/config/ssl/ca` directory after you have generated a wallet.
 
 ## Automated Setup
 
@@ -57,7 +57,9 @@ Before running the setup script, ensure that your Windows system meets the follo
 3. The following **software** is installed:
    - Docker Desktop for Windows
    - NSSM (Non-Sucking Service Manager)
-   - (Optional) Nginx (if you choose to include reverse proxy)
+4. (Optional) **Reverse Proxy** requirements:
+   - Internet Information Services (IIS) **OR** Nginx (choose one)
+   - OpenSSL (for certificate generation)
 
 ### Installing Prerequisites
 
@@ -73,13 +75,38 @@ Before running the setup script, ensure that your Windows system meets the follo
 1. Download NSSM from [nssm.cc](https://nssm.cc/download).
 2. Extract the zip file and copy `nssm.exe` from the appropriate folder (32-bit or 64-bit) to `C:\Windows\System32`.
 
-#### Nginx (Optional)
+#### Optional: Reverse Proxy Setup
 
-If you choose to include the Nginx reverse proxy:
+A reverse proxy is necessary for the DIG Node setup to securely expose your content server to the internet, this step is optional.
+You can choose between Internet Information Services (IIS) and Nginx for your reverse proxy setup. Microsoft IIS is native to Windows whereas Nginx is a popular lightweight cross-platform option. Install one of them based on your preference.
+
+##### Option 1: Internet Information Services (IIS)
+
+1. Open the Control Panel and go to "Programs and Features".
+2. Click on "Turn Windows features on or off".
+3. Check the box next to "Internet Information Services" and click OK.
+4. Wait for the installation to complete and restart your computer if prompted.
+
+After installing IIS, you'll need to install the URL Rewrite Module:
+
+1. Download the URL Rewrite Module from the [official Microsoft IIS site](https://www.iis.net/downloads/microsoft/url-rewrite).
+2. Run the installer and follow the prompts to complete the installation.
+
+##### Option 2: Nginx
 
 1. Download Nginx for Windows from the [official Nginx website](http://nginx.org/en/download.html).
 2. Extract the zip file to a location of your choice (e.g., `C:\nginx`).
 3. Add the Nginx directory to your system's PATH environment variable.
+
+#### OpenSSL (for certificate generation)
+
+If you plan to use SSL/TLS certificates:
+
+1. Download the OpenSSL installer (Light version) for Windows from a trusted source like [Shining Light Productions](https://slproweb.com/products/Win32OpenSSL.html).
+2. Run the installer and follow the prompts. Choose to copy OpenSSL DLLs to the OpenSSL binaries directory.
+3. Add the OpenSSL bin directory (e.g., `C:\Program Files\OpenSSL-Win64\bin`) to your system's PATH environment variable.
+
+After installing these prerequisites, you'll be ready to run the DIG Node setup script, which will guide you through the process of setting up your reverse proxy and other components.
 
 ## Manual Setup
 
