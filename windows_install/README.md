@@ -67,6 +67,7 @@ Before running the setup script, ensure that your Windows system meets the follo
 2. Click "Download for Windows" and run the installer.
 3. Follow the installation wizard, ensuring that "Use WSL 2 instead of Hyper-V" is selected if prompted.
 4. After installation, restart your computer.
+5. Open Docker Desktop and navigate to `Settings -> General` and check "Start Docker Desktop when Windows starts".
 
 #### NSSM (Non-Sucking Service Manager)
 
@@ -88,7 +89,7 @@ If you encounter any issues during the setup process, please check the following
 1. Ensure all prerequisites are correctly installed.
 2. Check that Docker Desktop is running.
 3. Verify that you're running the script with Administrator privileges.
-4. Check the Windows Event Viewer for any error messages related to the DIG Node service.
+4. Check the NSSM service logs for any error messages related to the DIG Node service.
 
 If problems persist, please contact [@digdotnet](https://x.com/digdotnet) for support.
 

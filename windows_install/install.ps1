@@ -87,10 +87,20 @@ function Setup-AutoUpdate {
     if ($response -eq "y" -or $response -eq "Y") {
         Write-ColorOutput Green "Setting up automatic updates..."
 
+        # Determine the script path
+        $scriptPath = if ($PSScriptRoot) {
+            $PSScriptRoot
+        } elseif ($MyInvocation.MyCommand.Path) {
+            Split-Path $MyInvocation.MyCommand.Path
+        } else {
+            $PWD.Path
+        }
+
         # Ensure the upgrade-node.ps1 script exists
-        $upgradeScriptPath = Join-Path $PSScriptRoot "upgrade-node.ps1"
+        $upgradeScriptPath = Join-Path $scriptPath "upgrade-node.ps1"
         if (-not (Test-Path $upgradeScriptPath)) {
             Write-ColorOutput Red "Error: upgrade-node.ps1 script not found in the current directory."
+            Write-ColorOutput Yellow "Please ensure upgrade-node.ps1 is in the same directory as this script."
             return
         }
 
