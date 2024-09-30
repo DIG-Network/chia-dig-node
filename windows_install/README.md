@@ -7,6 +7,7 @@ This folder contains scripts and instructions for setting up a DIG Node on Windo
 1. `install.ps1`: PowerShell script for automated DIG Node setup
 2. `upgrade-node.ps1`: PowerShell script for updating the DIG Node
 3. `manual-setup-windows.md`: Step-by-step manual setup instructions
+4. `reverse-proxy-setup.md`: Instructions for setting up a reverse proxy (optional)
 
 ## Getting Started
 
@@ -57,9 +58,6 @@ Before running the setup script, ensure that your Windows system meets the follo
 3. The following **software** is installed:
    - Docker Desktop for Windows
    - NSSM (Non-Sucking Service Manager)
-4. (Optional) **Reverse Proxy** requirements:
-   - Internet Information Services (IIS) **OR** Nginx (choose one)
-   - OpenSSL (for certificate generation)
 
 ### Installing Prerequisites
 
@@ -75,42 +73,13 @@ Before running the setup script, ensure that your Windows system meets the follo
 1. Download NSSM from [nssm.cc](https://nssm.cc/download).
 2. Extract the zip file and copy `nssm.exe` from the appropriate folder (32-bit or 64-bit) to `C:\Windows\System32`.
 
-#### Optional: Reverse Proxy Setup
+## Optional: Reverse Proxy Setup
 
-A reverse proxy is necessary for the DIG Node setup to securely expose your content server to the internet, this step is optional.
-You can choose between Internet Information Services (IIS) and Nginx for your reverse proxy setup. Microsoft IIS is native to Windows whereas Nginx is a popular lightweight cross-platform option. Install one of them based on your preference.
-
-##### Option 1: Internet Information Services (IIS)
-
-1. Open the Control Panel and go to "Programs and Features".
-2. Click on "Turn Windows features on or off".
-3. Check the box next to "Internet Information Services" and click OK.
-4. Wait for the installation to complete and restart your computer if prompted.
-
-After installing IIS, you'll need to install the URL Rewrite Module:
-
-1. Download the URL Rewrite Module from the [official Microsoft IIS site](https://www.iis.net/downloads/microsoft/url-rewrite).
-2. Run the installer and follow the prompts to complete the installation.
-
-##### Option 2: Nginx
-
-1. Download Nginx for Windows from the [official Nginx website](http://nginx.org/en/download.html).
-2. Extract the zip file to a location of your choice (e.g., `C:\nginx`).
-3. Add the Nginx directory to your system's PATH environment variable.
-
-#### OpenSSL (for certificate generation)
-
-If you plan to use SSL/TLS certificates:
-
-1. Download the OpenSSL installer (Light version) for Windows from a trusted source like [Shining Light Productions](https://slproweb.com/products/Win32OpenSSL.html).
-2. Run the installer and follow the prompts. Choose to copy OpenSSL DLLs to the OpenSSL binaries directory.
-3. Add the OpenSSL bin directory (e.g., `C:\Program Files\OpenSSL-Win64\bin`) to your system's PATH environment variable.
-
-After installing these prerequisites, you'll be ready to run the DIG Node setup script, which will guide you through the process of setting up your reverse proxy and other components.
+A reverse proxy can be set up to securely expose your DIG Node's content server to the internet. For instructions on setting up a reverse proxy, please refer to the [reverse proxy setup guide](reverse-proxy-setup.md).
 
 ## Manual Setup
 
-If you prefer to set up your DIG Node manually or encounter issues with the automated script, please refer to the `manual-setup-windows.md` file for step-by-step instructions.
+If you prefer to set up your DIG Node manually or encounter issues with the automated script, please refer to the [manual Windows setup guide](manual-setup-windows.md) for step-by-step instructions.
 
 ## Troubleshooting
 
