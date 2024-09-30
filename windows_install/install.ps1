@@ -246,6 +246,132 @@ server {
     }
 }
 
+
+function Setup-IISReverseProxy {
+    if ($INCLUDE_REVERSE_PROXY -eq "yes" -and $REVERSE_PROXY_TYPE -eq "IIS") {
+        Write-ColorOutput Cyan "Setting up IIS reverse-proxy..."
+
+        # IIS directories
+        $IIS_SITE_PATH = "$env:SystemDrive\inetpub\wwwroot\DIGNode"
+        $IIS_CERTS_DIR = "$env:USERPROFILE\.dig\remote\.iis\certs"
+
+        # Create directories
+        New-Item -ItemType Directory -Force -Path $IIS_SITE_PATH | Out-Null
+        New-Item -ItemType Directory -Force -Path $IIS_CERTS_DIR | Out-Null
+
+        # Generate TLS client certificate and key
+        Write-ColorOutput Blue "Generating TLS client certificate and key for IIS..."
+
+        # Paths to the CA certificate and key (assumed to be in .\ssl\ca\)
+        $CA_CERT = ".\ssl\ca\chia_ca.crt"
+        $CA_KEY = ".\ssl\ca\chia_ca.key"
+
+        # Check if CA certificate and key exist
+        if (-not (Test-Path $CA_CERT) -or -not (Test-Path $CA_KEY)) {
+            Write-ColorOutput Red "Error: CA certificate or key not found in .\ssl\ca\"
+            Write-Host "Please ensure chia_ca.crt and chia_ca.key are present in .\ssl\ca\ directory."
+            exit 1
+        }
+
+        # Generate client key and certificate
+        & openssl genrsa -out "$IIS_CERTS_DIR\client.key" 2048
+        & openssl req -new -key "$IIS_CERTS_DIR\client.key" -subj "/CN=dig-iis-client" -out "$IIS_CERTS_DIR\client.csr"
+        & openssl x509 -req -in "$IIS_CERTS_DIR\client.csr" -CA $CA_CERT -CAkey $CA_KEY `
+            -CAcreateserial -out "$IIS_CERTS_DIR\client.crt" -days 365 -sha256
+
+        # Clean up CSR
+        Remove-Item "$IIS_CERTS_DIR\client.csr"
+        Copy-Item $CA_CERT "$IIS_CERTS_DIR\chia_ca.crt"
+
+        Write-ColorOutput Green "TLS client certificate and key generated."
+
+        # Prompt for hostname
+        Write-ColorOutput Blue "Would you like to set a hostname for your server?"
+        $USE_HOSTNAME = Read-Host "(y/n)"
+
+        if ($USE_HOSTNAME -eq "y") {
+            $HOSTNAME = Read-Host "Please enter your hostname (e.g., example.com)"
+        } else {
+            $HOSTNAME = "localhost"
+        }
+
+        # Install URL Rewrite Module if not already installed
+        if (-not (Get-WebGlobalModule -Name "RewriteModule")) {
+            Write-ColorOutput Yellow "URL Rewrite Module is not installed. Installing now..."
+            # You might need to download and install the URL Rewrite Module here
+            # This typically involves downloading an installer and running it
+            # Example: Invoke-WebRequest -Uri "https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi" -OutFile "rewrite_amd64_en-US.msi"
+            # Start-Process -FilePath "msiexec.exe" -ArgumentList "/i rewrite_amd64_en-US.msi /qn" -Wait
+        }
+
+        # Create a new IIS website for the DIG Node
+        New-WebSite -Name "DIGNode" -Port 80 -PhysicalPath $IIS_SITE_PATH -Force
+
+        # Set up URL Rewrite rule
+        $ruleName = "DIGNodeReverseProxy"
+        $inboundRule = @{
+            name = $ruleName
+            patternSyntax = 'Wildcard'
+            pattern = '*'
+            url = "http://localhost:4161/{R:0}"
+            action = @{
+                type = 'Rewrite'
+                url = "http://localhost:4161/{R:0}"
+            }
+        }
+        Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST/DIGNode' -Filter "system.webServer/rewrite/rules" -Name "." -Value $inboundRule
+
+        Write-ColorOutput Green "IIS reverse proxy basic setup complete."
+
+        if ($USE_HOSTNAME -eq "y") {
+            Write-ColorOutput Blue "Would you like to set up SSL certificates for your hostname?"
+            $SETUP_SSL = Read-Host "(y/n)"
+
+            if ($SETUP_SSL -eq "y") {
+                Write-ColorOutput Yellow "To successfully set up SSL certificates, please ensure the following:"
+                Write-Host "1. Your domain name ($HOSTNAME) must be correctly configured to point to your server's public IP address."
+                Write-Host "2. Ports 80 and 443 must be open and accessible from the internet."
+                Write-Host "3. No other service is running on port 80 or 443."
+                Write-Host "`nPlease make sure these requirements are met before proceeding."
+
+                $PROCEED = Read-Host "Have you completed these steps? (y/n)"
+
+                if ($PROCEED -eq "y") {
+                    Write-ColorOutput Yellow "Automatic SSL certificate setup is not available in this script for Windows IIS."
+                    Write-Host "Please obtain SSL certificates manually and install them in IIS for the DIGNode website."
+                    Write-Host "Then, update the IIS bindings to use the SSL certificate."
+
+                    $UPDATE_CONF = Read-Host "Have you obtained and installed SSL certificates for IIS? (y/n)"
+                    if ($UPDATE_CONF -eq "y") {
+                        # Add HTTPS binding
+                        New-WebBinding -Name "DIGNode" -Protocol "https" -Port 443 -HostHeader $HOSTNAME
+
+                        # Redirect HTTP to HTTPS
+                        $redirectRule = @{
+                            name = "Redirect to HTTPS"
+                            patternSyntax = 'ECMAScript'
+                            pattern = '(.*)'
+                            url = "https://{HTTP_HOST}{REQUEST_URI}"
+                            action = @{
+                                type = 'Redirect'
+                                url = "https://{HTTP_HOST}{REQUEST_URI}"
+                                redirectType = 'Permanent'
+                            }
+                            conditions = @{
+                                input = "{HTTPS}"
+                                pattern = "^OFF$"
+                            }
+                        }
+                        Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST/DIGNode' -Filter "system.webServer/rewrite/rules" -Name "." -Value $redirectRule
+
+                        Write-ColorOutput Green "IIS configuration updated for SSL. Please ensure you've assigned the SSL certificate to the HTTPS binding in IIS Manager."
+                    }
+                }
+            }
+        }
+    }
+}
+
 # Function to open ports in Windows Firewall
 function Open-Ports {
     param (
@@ -314,24 +440,55 @@ function Ask-OpenPorts {
     }
 }
 
-# Function to ask about including Nginx reverse proxy
-function Ask-IncludeNginx {
+# Function to ask about including reverse proxy
+function Ask-IncludeReverseProxy {
     Write-Host "We need to set up a reverse proxy to your DIG Node's content server."
-    Write-Host "If you already have a reverse proxy setup, such as IIS or another Nginx instance,"
-    Write-Host "you should skip this and manually set up port 80 and port 443 to map to your DIG Node's content server at port 4161."
-    Write-ColorOutput Blue "Would you like to include the Nginx reverse-proxy setup?"
+    Write-Host "This will map port 80 and port 443 to your DIG Node's content server at port 4161."
+    Write-ColorOutput Blue "Would you like to set up a reverse proxy?"
     $reply = Read-Host "(y/n)"
 
     if ($reply -match "^[Yy]$") {
-        $script:INCLUDE_NGINX = "yes"
-        $nginxInstalled = Check-Software "Nginx" "nginx -v"
-        if (-not $nginxInstalled) {
-            Write-ColorOutput Red "Nginx is not installed. Please install Nginx and try again."
-            exit 1
+        Write-Host "Choose your reverse proxy setup:"
+        Write-Host "1. Internet Information Services (IIS)"
+        Write-Host "2. Nginx"
+        Write-Host "3. I'll set up my own reverse proxy"
+        $choice = Read-Host "Enter your choice (1-3)"
+
+        switch ($choice) {
+            "1" {
+                $script:REVERSE_PROXY = "iis"
+                $iisInstalled = (Get-Service W3SVC -ErrorAction SilentlyContinue) -ne $null
+                if (-not $iisInstalled) {
+                    Write-ColorOutput Red "IIS is not installed. Please install IIS and try again."
+                    exit 1
+                }
+                $urlRewriteInstalled = (Get-WebGlobalModule -Name "RewriteModule" -ErrorAction SilentlyContinue) -ne $null
+                if (-not $urlRewriteInstalled) {
+                    Write-ColorOutput Red "URL Rewrite Module for IIS is not installed. Please install it and try again."
+                    exit 1
+                }
+            }
+            "2" {
+                $script:REVERSE_PROXY = "nginx"
+                $nginxInstalled = Check-Software "Nginx" "nginx -v"
+                if (-not $nginxInstalled) {
+                    Write-ColorOutput Red "Nginx is not installed. Please install Nginx and try again."
+                    exit 1
+                }
+            }
+            "3" {
+                $script:REVERSE_PROXY = "manual"
+                Write-ColorOutput Yellow "You have chosen to set up your own reverse proxy."
+                Write-Host "Please ensure you configure your reverse proxy to forward requests from port 80/443 to your DIG Node's content server at port 4161."
+            }
+            default {
+                Write-ColorOutput Red "Invalid choice. Exiting."
+                exit 1
+            }
         }
     } else {
-        $script:INCLUDE_NGINX = "no"
-        Write-ColorOutput Yellow "Warning: You have chosen not to include the Nginx reverse-proxy setup."
+        $script:REVERSE_PROXY = "none"
+        Write-ColorOutput Yellow "Warning: You have chosen not to include a reverse proxy setup."
         Write-Host "Unless you plan on exposing port 80/443 in another way, your DIG Node's content server will be inaccessible to the browser."
     }
 }
@@ -556,8 +713,8 @@ $dockerComposeContent += @"
 $dockerComposeContent | Out-File -FilePath "docker-compose.yml" -Encoding utf8
 Write-ColorOutput Green "docker-compose.yml file created successfully."
 
-# Ask if the user wants to include Nginx reverse proxy
-Ask-IncludeNginx
+# Ask user if they want to include a reverse proxy
+Ask-IncludeReverseProxy
 
 # Call the function to ask about opening ports
 Ask-OpenPorts
@@ -565,9 +722,11 @@ Ask-OpenPorts
 # Ask about UPnP port forwarding
 Ask-UPnPPorts
 
-# Setup Nginx reverse proxy if chosen
-if ($INCLUDE_NGINX -eq "yes") {
+# Later in your script, you can call the appropriate function based on the user's choice:
+if ($REVERSE_PROXY -eq "nginx") {
     Setup-NginxReverseProxy
+} elseif ($REVERSE_PROXY -eq "iis") {
+    Setup-IISReverseProxy
 }
 
 # Pull latest Docker images
