@@ -1,1 +1,0 @@
-Place your `chia_ca.crt` and `chia_ca.key` files in this directory for Windows installation.
