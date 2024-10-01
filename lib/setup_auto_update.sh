@@ -16,7 +16,7 @@ setup_auto_update() {
         sudo chmod +x ./upgrade-node
 
         # Create a cron job to run the upgrade-node script once a day
-        cron_job="@daily cd $(pwd) && sudo ./upgrade-node"
+        cron_job="@daily cd $(pwd) && sudo ./upgrade-node.sh"
 
         # Add the cron job to the root user's cron
         (crontab -l 2>/dev/null; echo "$cron_job") | crontab -
