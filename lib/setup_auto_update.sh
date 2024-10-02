@@ -4,6 +4,7 @@
 # Function to ask if the user wants to keep their DIG Node updated
 ###############################################################################
 setup_auto_update() {
+    WORKING_DIR=$(pwd)
     echo -e "${YELLOW}Would you like to automatically keep your DIG Node updated?${NC}"
     echo -e "This will create a cron job to run './upgrade-node' once a day."
     echo -n "Do you want to set up automatic updates? (y/n): "
@@ -13,7 +14,7 @@ setup_auto_update() {
         echo -e "${GREEN}Setting up automatic updates...${NC}"
 
         # Ensure the upgrade-node script is executable
-        sudo chmod +x ./upgrade-node
+        sudo chmod +x ./upgrade-node.sh
 
         # Create a cron job to run the upgrade-node script once a day
         cron_job="@daily cd $(pwd) && sudo ./upgrade-node.sh"
