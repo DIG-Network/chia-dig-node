@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 collect_user_inputs() {
     # Ask if the user has a dynamic IP

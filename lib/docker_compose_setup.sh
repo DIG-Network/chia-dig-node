@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 create_docker_compose() {
     USER_HOME=$(eval echo ~${SUDO_USER})
     DOCKER_COMPOSE_FILE="$PWD/docker-compose.yml"
@@ -93,6 +95,26 @@ EOF
 EOF
     else
         echo -e "${YELLOW}Chia FullNode will not be added.${NC}"
+    fi
+
+    # Prompt the user if they want to run a Chia FullNode
+    echo -e "${YELLOW}\nWatchtower is used to keep your containers up to date.${NC}"
+    read -p "Would you like to runWatchtower? (y/n): " -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        cat <<EOF >> $DOCKER_COMPOSE_FILE
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - dig_network
+    restart: always
+EOF
+    else
+        echo -e "${YELLOW}Watchtower will not be added.${NC}"
     fi
 
     # Include Nginx reverse-proxy if selected
