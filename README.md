@@ -52,7 +52,7 @@ Before running the setup script, ensure that the following software is installed
 The repository should have the following structure:
 
 ```
-setup-dig-node.sh
+install.sh
 lib/
 ├── ask_include_nginx.sh
 ├── check_root.sh
