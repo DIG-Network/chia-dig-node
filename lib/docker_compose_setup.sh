@@ -97,7 +97,7 @@ EOF
         echo -e "${YELLOW}Chia FullNode will not be added.${NC}"
     fi
 
-    # Prompt the user if they want to run a Chia FullNode
+    # Prompt the user if they want to run a Watchtower
     echo -e "${YELLOW}\nWatchtower is used to keep your containers up to date.${NC}"
     read -p "Would you like to runWatchtower? (y/n): " -n 1 -r
     echo
@@ -111,6 +111,8 @@ EOF
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - dig_network
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 3600
     restart: always
 EOF
     else
