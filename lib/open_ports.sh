@@ -36,6 +36,7 @@ open_ports() {
     # Use the appropriate firewall management tool based on the distribution
     case $FIREWALL in
         ufw)
+            yes | ufw enable
             for PORT in "${PORTS[@]}"; do
                 echo -e "${YELLOW}Allowing port $PORT on UFW...${NC}"
                 ufw allow "$PORT"
