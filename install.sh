@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ###############################################################################
 #                       DIG Node Setup Script with SSL and Let's Encrypt

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Adds a cron job to run the upgrade-node script once a day
 

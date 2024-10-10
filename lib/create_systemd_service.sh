@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 create_systemd_service() {
     WORKING_DIR=$(pwd)

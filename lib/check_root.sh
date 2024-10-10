@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 check_root() {
     if [ "$EUID" -ne 0 ]; then

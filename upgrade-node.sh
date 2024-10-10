@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Variables
 USER_NAME=${SUDO_USER:-$(whoami)}

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 generate_credentials() {
     echo -e "${BLUE}Generating high-entropy DIG_USERNAME and DIG_PASSWORD...${NC}"

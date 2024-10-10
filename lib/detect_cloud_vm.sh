@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 detect_cloud_vm() {
     local url
