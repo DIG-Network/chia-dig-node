@@ -14,6 +14,10 @@ services:
       - "4159:4159"
     volumes:
       - $USER_HOME/.dig/remote:/.dig
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     environment:
       - DIG_USERNAME=$DIG_USERNAME
       - DIG_PASSWORD=$DIG_PASSWORD
@@ -32,6 +36,10 @@ services:
       - "4161:4161"
     volumes:
       - $USER_HOME/.dig/remote:/.dig
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     environment:
       - DIG_FOLDER_PATH=/.dig
       - PORT=4161
@@ -48,6 +56,10 @@ services:
       - "4160:4160"
     volumes:
       - $USER_HOME/.dig/remote:/.dig
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     environment:
       - DIG_USERNAME=$DIG_USERNAME
       - DIG_PASSWORD=$DIG_PASSWORD
@@ -86,6 +98,10 @@ EOF
       service: node
       self_hostname: 0.0.0.0
       keys: "persistent"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     volumes:
       - ~/.dig/chia-data:/chia-data
     networks:
@@ -107,6 +123,10 @@ EOF
     image: containrrr/watchtower:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     networks:
       - dig_network
     restart: always
@@ -127,6 +147,10 @@ EOF
     volumes:
       - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
+    logging:
+      options:
+        max-size: "10m"
+        max-file: 7
     depends_on:
       - content-server
     networks:
