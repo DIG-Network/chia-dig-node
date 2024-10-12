@@ -7,8 +7,6 @@ create_docker_compose() {
 
     # Begin writing the docker-compose.yml content
     cat <<EOF > $DOCKER_COMPOSE_FILE
-version: '3.8'
-
 services:
   propagation-server:
     image: dignetwork/dig-propagation-server:latest-alpha
