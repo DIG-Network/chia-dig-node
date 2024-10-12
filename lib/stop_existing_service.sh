@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 stop_existing_service() {
     SERVICE_NAME="dig-node.service"  # Adjust service name as needed

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ask_include_nginx() {
     echo "We need to set up a reverse proxy to your DIG Node's content server."

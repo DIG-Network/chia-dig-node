@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ask_upnp_ports() {
     echo "In addition to the firewall, you may need to open ports on your router."

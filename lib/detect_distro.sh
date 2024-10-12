@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 detect_distro() {
     if [ -f /etc/os-release ]; then
         # Read the distro info
