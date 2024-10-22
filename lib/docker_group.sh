@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 docker_group_check() {
     USER_NAME=${SUDO_USER:-$(whoami)}  # User executing the script

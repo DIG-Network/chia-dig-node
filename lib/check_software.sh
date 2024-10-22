@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 check_software() {
     echo -e "${BLUE}Checking for required software...${NC}"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 nginx_setup() {
     USER_HOME=$(eval echo ~${SUDO_USER})

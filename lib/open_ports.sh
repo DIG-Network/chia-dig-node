@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ask_open_ports() {
     echo -e "${BLUE}This setup uses the following ports:${NC}"
