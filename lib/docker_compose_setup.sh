@@ -7,9 +7,23 @@ create_docker_compose() {
 
     # Begin writing the docker-compose.yml content
     cat <<EOF > $DOCKER_COMPOSE_FILE
+version: '3.8'
+
 services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - dig_network
+    restart: always
+
   propagation-server:
     image: dignetwork/dig-propagation-server:latest-alpha
+    container_name: propagation-server
     ports:
       - "4159:4159"
     volumes:
@@ -26,12 +40,17 @@ services:
       - REMOTE_NODE=1
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
       - TRUSTED_FULLNODE_PORT=$TRUSTED_FULLNODE_PORT
+      - USE_REDIS=true
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     restart: always
     networks:
       - dig_network
 
   content-server:
     image: dignetwork/dig-content-server:latest-alpha
+    container_name: content-server
     ports:
       - "4161:4161"
     volumes:
@@ -46,12 +65,17 @@ services:
       - REMOTE_NODE=1
       - TRUSTED_FULLNODE=$TRUSTED_FULLNODE
       - TRUSTED_FULLNODE_PORT=$TRUSTED_FULLNODE_PORT
+      - USE_REDIS=true
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     restart: always
     networks:
       - dig_network
 
   incentive-server:
     image: dignetwork/dig-incentive-server:latest-alpha
+    container_name: incentive-server
     ports:
       - "4160:4160"
     volumes:
@@ -71,6 +95,10 @@ services:
       - PUBLIC_IP=$PUBLIC_IP
       - DISK_SPACE_LIMIT_BYTES=$DISK_SPACE_LIMIT_BYTES
       - MERCENARY_MODE=$MERCENARY_MODE
+      - USE_REDIS=true
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     restart: always
     networks:
       - dig_network
@@ -90,6 +118,7 @@ EOF
 
   chia-nodes:
     image: ghcr.io/chia-network/chia:latest
+    container_name: chia-nodes
     ports:
       - "8444:8444"
       - "8555:8555"
@@ -106,21 +135,25 @@ EOF
       - ~/.dig/chia-data:/chia-data
     networks:
       - dig_network
+    restart: always
 EOF
     else
         echo -e "${YELLOW}Chia FullNode will not be added.${NC}"
     fi
 
-    # Prompt the user if they want to run a Watchtower
+    # Prompt the user if they want to run Watchtower
     echo -e "${YELLOW}\nWatchtower is used to keep your containers up to date.${NC}"
-    read -p "Would you like to runWatchtower? (y/n): " -n 1 -r
+    read -p "Would you like to run Watchtower? (y/n): " -n 1 -r
     echo
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Adding Watchtower to the docker-compose file...${NC}"
+        
         cat <<EOF >> $DOCKER_COMPOSE_FILE
 
   watchtower:
     image: containrrr/watchtower:latest
+    container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     logging:
@@ -139,10 +172,13 @@ EOF
 
     # Include Nginx reverse-proxy if selected
     if [[ $INCLUDE_NGINX == "yes" ]]; then
+        echo -e "${BLUE}Adding Nginx Reverse Proxy to the docker-compose file...${NC}"
+        
         cat <<EOF >> $DOCKER_COMPOSE_FILE
 
   reverse-proxy:
     image: nginx:latest
+    container_name: reverse-proxy
     ports:
       - "80:80"
       - "443:443"
@@ -161,12 +197,15 @@ EOF
 EOF
     fi
 
-    # Add the networks section
+    # Add the networks and volumes sections
     cat <<EOF >> $DOCKER_COMPOSE_FILE
 
 networks:
   dig_network:
     driver: bridge
+
+volumes:
+  redis-data:
 EOF
 
     echo -e "${GREEN}docker-compose.yml created successfully.${NC}"
