@@ -177,14 +177,17 @@ EOF
         cat <<EOF >> $DOCKER_COMPOSE_FILE
 
   reverse-proxy:
-    image: nginx:latest
+    image: openresty/openresty:alpine
     container_name: reverse-proxy
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
+      - $USER_HOME/.dig/remote/.nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
+      - $USER_HOME/.dig/remote/.nginx/lua:/usr/local/openresty/nginx/lua
+
     logging:
       options:
         max-size: "10m"
