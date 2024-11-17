@@ -177,7 +177,7 @@ EOF
         cat <<EOF >> $DOCKER_COMPOSE_FILE
 
   reverse-proxy:
-    image: openresty/openresty:alpine
+    image: openresty/openresty:alpine-fat
     container_name: reverse-proxy
     ports:
       - "80:80"

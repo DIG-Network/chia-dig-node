@@ -175,7 +175,7 @@ EOF
         cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
 sserver {
     listen 80;
-    server_name ~^(?<subdomain>[^.]+)\.yourdomain\.com$;
+    server_name ~^(?<encodedId>[A-Za-z0-9]{1,63})\.$(echo "$HOSTNAME" | sed 's/\./\\./g')\$;
 
     location / {
         access_by_lua_block {
