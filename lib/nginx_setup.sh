@@ -1,48 +1,169 @@
 #!/usr/bin/env bash
 
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Function to display messages in color
+function echo_color() {
+    local color="$1"
+    local message="$2"
+    case "$color" in
+        "red")
+            echo -e "\e[31m${message}\e[0m"
+            ;;
+        "green")
+            echo -e "\e[32m${message}\e[0m"
+            ;;
+        "yellow")
+            echo -e "\e[33m${message}\e[0m"
+            ;;
+        "blue")
+            echo -e "\e[34m${message}\e[0m"
+            ;;
+        *)
+            echo "${message}"
+            ;;
+    esac
+}
+
+# Main setup function
 nginx_setup() {
+    # Define user home directory
     USER_HOME=$(eval echo ~${SUDO_USER})
-    if [[ $INCLUDE_NGINX == "yes" ]]; then
-        echo -e "${BLUE}Setting up Nginx reverse-proxy...${NC}"
 
-        # Nginx directories
-        NGINX_CONF_DIR="$USER_HOME/.dig/remote/.nginx/conf.d"
-        NGINX_CERTS_DIR="$USER_HOME/.dig/remote/.nginx/certs"
-        NGINX_MAIN_CONF="$USER_HOME/.dig/remote/.nginx/nginx.conf"
+    # Prompt for hostname
+    echo_color "blue" "Would you like to set a hostname for your server? (e.g., example.com)"
+    read -p "(y/n): " -n 1 -r
+    echo    # Move to a new line
 
-        # Create directories
-        mkdir -p "$NGINX_CONF_DIR"
-        mkdir -p "$NGINX_CERTS_DIR"
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "Please enter your hostname (e.g., example.com): " HOSTNAME
+        USE_HOSTNAME="yes"
+    else
+        USE_HOSTNAME="no"
+        HOSTNAME="_"
+    fi
 
-        # Generate TLS client certificate and key
-        echo -e "\n${BLUE}Generating TLS client certificate and key for Nginx...${NC}"
+    # Define directories
+    NGINX_CONF_DIR="$USER_HOME/.dig/remote/.nginx/conf.d"
+    NGINX_CERTS_DIR="$USER_HOME/.dig/remote/.nginx/certs"
+    NGINX_MAIN_CONF="$USER_HOME/.dig/remote/.nginx/nginx.conf"
+    NGINX_LUA_DIR="$USER_HOME/.dig/remote/.nginx/lua"
+    DOCKER_COMPOSE_FILE="$USER_HOME/.dig/remote/docker-compose.yml"
 
-        # Paths to the CA certificate and key (assumed to be in ./ssl/ca/)
-        CA_CERT="./ssl/ca/chia_ca.crt"
-        CA_KEY="./ssl/ca/chia_ca.key"
+    # Create necessary directories
+    echo_color "blue" "Creating necessary directories..."
+    mkdir -p "$NGINX_CONF_DIR"
+    mkdir -p "$NGINX_CERTS_DIR"
+    mkdir -p "$NGINX_LUA_DIR"
 
-        # Check if CA certificate and key exist
-        if [ ! -f "$CA_CERT" ] || [ ! -f "$CA_KEY" ]; then
-            echo -e "${RED}Error: CA certificate or key not found in ./ssl/ca/${NC}"
-            echo "Please ensure chia_ca.crt and chia_ca.key are present in ./ssl/ca/ directory."
-            exit 1
-        fi
+    # Create Lua Base62 Encoder/Decoder Module
+    echo_color "blue" "Creating Lua Base62 module..."
+    cat <<'EOF' > "$NGINX_LUA_DIR/base62.lua"
+-- base62.lua
+local Base62 = {}
+Base62.__index = Base62
 
-        # Generate client key and certificate
-        openssl genrsa -out "$NGINX_CERTS_DIR/client.key" 2048
-        openssl req -new -key "$NGINX_CERTS_DIR/client.key" -subj "/CN=dig-nginx-client" -out "$NGINX_CERTS_DIR/client.csr"
-        openssl x509 -req -in "$NGINX_CERTS_DIR/client.csr" -CA "$CA_CERT" -CAkey "$CA_KEY" \
-        -CAcreateserial -out "$NGINX_CERTS_DIR/client.crt" -days 365 -sha256
+local charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-        # Clean up CSR
-        rm "$NGINX_CERTS_DIR/client.csr"
-        cp "$CA_CERT" "$NGINX_CERTS_DIR/chia_ca.crt"
+function Base62.encode(data)
+    local number = 0
+    for i = 1, #data do
+        number = number * 256 + data:byte(i)
+    end
 
-        echo -e "${GREEN}TLS client certificate and key generated.${NC}"
+    local encoded = ""
+    local base = 62
+    while number > 0 do
+        local remainder = number % base
+        number = math.floor(number / base)
+        encoded = charset:sub(remainder + 1, remainder + 1) .. encoded
+    end
 
-        # Generate main Nginx configuration
-        echo -e "${BLUE}Writing main Nginx configuration file...${NC}"
-        cat <<EOF > "$NGINX_MAIN_CONF"
+    return encoded
+end
+
+function Base62.decode(str)
+    local number = 0
+    local base = 62
+
+    for i = 1, #str do
+        local char = str:sub(i, i)
+        local index = string.find(charset, char, 1, true)
+        if not index then
+            return nil, "Invalid character '" .. char .. "' in Base62 string"
+        end
+        number = number * base + (index - 1)
+    end
+
+    -- Convert the big integer back to binary data
+    local bytes = {}
+    while number > 0 do
+        local byte = number % 256
+        number = math.floor(number / 256)
+        table.insert(bytes, 1, string.char(byte))
+    end
+
+    return table.concat(bytes)
+end
+
+return Base62
+EOF
+    echo_color "green" "Lua Base62 module created."
+
+    # Create Lua Decoder Module (Simplified, Reversible ID without HMAC)
+    echo_color "blue" "Creating Lua Decoder module..."
+    cat <<'EOF' > "$NGINX_LUA_DIR/decoder.lua"
+-- decoder.lua
+local Base62 = require("base62")
+
+local Decoder = {}
+Decoder.__index = Decoder
+
+function Decoder.decode(encodedId)
+    -- Decode the Base62 string back to binary data
+    local decodedData, err = Base62.decode(encodedId)
+    if not decodedData then
+        return nil, "Failed to decode Base62: " .. err
+    end
+
+    -- Ensure there's at least 1 byte for chain_length and STORE_ID_LENGTH bytes for storeId
+    local STORE_ID_LENGTH = 32 -- bytes
+    if #decodedData < (1 + STORE_ID_LENGTH) then
+        return nil, "Decoded data is too short to contain required fields."
+    end
+
+    -- Extract chain_length (1 byte)
+    local chain_length = string.byte(decodedData:sub(1,1))
+
+    -- Define the expected total length
+    local expected_length = 1 + chain_length + STORE_ID_LENGTH
+    if #decodedData ~= expected_length then
+        return nil, "Decoded data length mismatch. Expected " .. expected_length .. " bytes, got " .. #decodedData .. " bytes."
+    end
+
+    -- Extract chain and storeId
+    local chain = decodedData:sub(2, 1 + chain_length)
+    local storeId = decodedData:sub(2 + chain_length, 1 + chain_length + STORE_ID_LENGTH)
+
+    -- Convert storeId binary to hex string
+    local storeIdHex = storeId:gsub(".", function(c)
+        return string.format("%02x", string.byte(c))
+    end)
+
+    return {
+        chain = chain,
+        storeId = storeIdHex
+    }
+end
+
+return Decoder
+EOF
+    echo_color "green" "Lua Decoder module created."
+
+    # Create Main Nginx Configuration
+    echo_color "blue" "Creating main Nginx configuration..."
+    cat <<EOF > "$NGINX_MAIN_CONF"
 worker_processes auto;
 
 events {
@@ -50,6 +171,7 @@ events {
 }
 
 http {
+    lua_package_path "/etc/nginx/lua/?.lua;;";
     lua_shared_dict base32_cache 10m;
 
     include /etc/nginx/conf.d/*.conf;
@@ -58,27 +180,14 @@ http {
     keepalive_timeout  65;
 }
 EOF
-        echo -e "${GREEN}Main Nginx configuration written to $NGINX_MAIN_CONF${NC}"
+    echo_color "green" "Main Nginx configuration created."
 
-        # Prompt for hostname
-        echo -e "\n${BLUE}Would you like to set a hostname for your server?${NC}"
-        read -p "(y/n): " -n 1 -r
-        echo    # Move to a new line
+    # Create Nginx Server Blocks
+    echo_color "blue" "Creating Nginx server blocks..."
 
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            read -p "Please enter your hostname (e.g., example.com): " HOSTNAME
-            USE_HOSTNAME="yes"
-        else
-            USE_HOSTNAME="no"
-            HOSTNAME="_"
-        fi
-
-        # Generate server block configurations
-        echo -e "${BLUE}Writing server block configurations...${NC}"
-
-        if [[ $USE_HOSTNAME == "yes" ]]; then
-            # Redirect HTTP to HTTPS
-            cat <<EOF > "$NGINX_CONF_DIR/redirect.conf"
+    if [[ $USE_HOSTNAME == "yes" ]]; then
+        # Redirect HTTP to HTTPS
+        cat <<EOF > "$NGINX_CONF_DIR/redirect.conf"
 server {
     listen 80;
     server_name $HOSTNAME;
@@ -86,8 +195,8 @@ server {
 }
 EOF
 
-            # HTTPS server block for main hostname (initially with placeholder certs)
-            cat <<EOF > "$NGINX_CONF_DIR/main.conf"
+        # HTTPS server block for main hostname (proxying without encodedId)
+        cat <<EOF > "$NGINX_CONF_DIR/main.conf"
 server {
     listen 443 ssl;
     server_name $HOSTNAME;
@@ -102,19 +211,15 @@ server {
         proxy_pass http://content-server:4161;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify off;
     }
 }
 EOF
 
-            # Server block for regex-based hostname handling
-            cat <<EOF > "$NGINX_CONF_DIR/regex.conf"
+        # Encoded subdomain server block
+        cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
 server {
     listen 443 ssl;
-    server_name ~^(?<chainname>[^.]+)\.(?<storeidBase32>[^.]+)(?:\.(?<rootBase32>[^.]+))?\.${HOSTNAME}$;
+    server_name ~^(?<encodedId>[A-Za-z0-9]{1,63})\.$HOSTNAME$;
 
     ssl_certificate /etc/nginx/certs/fullchain.pem;
     ssl_certificate_key /etc/nginx/certs/privkey.pem;
@@ -122,201 +227,43 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5;
 
     location / {
-        set \$storeidHex '';
-        set \$rootHex '';
-
-        # Convert base32 to base16 using Lua
+        # Decode the encodedId to retrieve chain and storeId
         access_by_lua_block {
-            local base32_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-            local function base32_to_hex(base32)
-                local bit = require("bit")
-                local result = {}
-                local buffer = 0
-                local bits_left = 0
+            local Decoder = require("decoder")
+            local encodedId = ngx.var.encodedId
 
-                for char in base32:gmatch(".") do
-                    local value = base32_chars:find(char:upper(), 1, true)
-                    if not value then
-                        ngx.log(ngx.ERR, "Invalid Base32 character: ", char)
-                        return nil
-                    end
-                    value = value - 1 -- Convert to 0-based index
-
-                    buffer = bit.bor(bit.lshift(buffer, 5), value)
-                    bits_left = bits_left + 5
-
-                    while bits_left >= 4 do
-                        bits_left = bits_left - 4
-                        local hex_digit = bit.band(bit.rshift(buffer, bits_left), 0xF)
-                        table.insert(result, string.format("%X", hex_digit))
-                    end
-                end
-
-                return table.concat(result)
-            end
-
-            local storeidBase32 = ngx.var.storeidBase32
-            local rootBase32 = ngx.var.rootBase32
-
-            ngx.var.storeidHex = base32_to_hex(storeidBase32)
-            ngx.var.rootHex = rootBase32 and base32_to_hex(rootBase32) or nil
-
-            if not ngx.var.storeidHex or (rootBase32 and not ngx.var.rootHex) then
-                ngx.log(ngx.ERR, "Base32-to-Hex conversion failed")
+            if not encodedId then
+                ngx.log(ngx.ERR, "No encodedId provided")
                 ngx.exit(ngx.HTTP_BAD_REQUEST)
             end
+
+            -- Decode the encodedId using Decoder module
+            local decoded, err = Decoder.decode(encodedId)
+            if not decoded then
+                ngx.log(ngx.ERR, "Failed to decode encodedId: " .. err)
+                ngx.exit(ngx.HTTP_BAD_REQUEST)
+            end
+
+            local chain = decoded.chain
+            local storeId = decoded.storeId
+
+            -- Set variables for use in proxy_pass
+            ngx.var.chain = chain
+            ngx.var.storeId = storeId
         }
 
-        proxy_pass http://content-server:4161/urn:dig:chia:\$chainname:\$storeidHex:\$rootHex\$request_uri;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify off;
+        # Proxy to content server with chain and storeId as query parameters
+        proxy_pass http://content-server:4161/?chain=$chain&storeId=$storeId$request_uri;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
 }
 EOF
 
-            echo -e "${GREEN}Server block configurations written to $NGINX_CONF_DIR${NC}"
-
-            # Ask the user if they would like to set up Let's Encrypt
-            echo -e "\n${BLUE}Would you like to set up Let's Encrypt SSL certificates for your hostname?${NC}"
-            read -p "(y/n): " -n 1 -r
-            echo    # Move to a new line
-
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                SETUP_LETSENCRYPT="yes"
-
-                while true; do
-                    # Provide requirements and ask for confirmation
-                    echo -e "\n${YELLOW}To successfully obtain Let's Encrypt SSL certificates, please ensure the following:${NC}"
-                    echo "1. Your domain name ($HOSTNAME) must be correctly configured to point to your server's public IP address."
-                    echo "2. Ports 80 and 443 must be open and accessible from the internet."
-                    echo "3. No other service is running on port 80 (e.g., Apache, another Nginx instance)."
-                    echo "4. You have access to your DNS provider to add TXT records for DNS-01 challenges."
-                    echo -e "\nPlease make sure these requirements are met before proceeding."
-
-                    read -p "Have you completed these steps? (y/n): " -n 1 -r
-                    echo    # Move to a new line
-
-                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                        echo -e "${RED}Please complete the required steps before proceeding.${NC}"
-                        read -p "Would you like to skip Let's Encrypt setup? (y/n): " -n 1 -r
-                        echo    # Move to a new line
-                        if [[ $REPLY =~ ^[Yy]$ ]]; then
-                            SETUP_LETSENCRYPT="no"
-                            break
-                        else
-                            continue
-                        fi
-                    fi
-
-                    # Prompt for email address for Let's Encrypt
-                    read -p "Please enter your email address for Let's Encrypt notifications: " LETSENCRYPT_EMAIL
-
-                    # Stop Nginx container before running certbot
-                    echo -e "\n${BLUE}Stopping Nginx container to set up Let's Encrypt...${NC}"
-                    docker-compose stop reverse-proxy
-
-                    # Obtain wildcard SSL certificates using certbot with DNS-01 challenge
-                    echo -e "${BLUE}Obtaining wildcard SSL certificates for *.$HOSTNAME, *.*.$HOSTNAME, and *.*.*.$HOSTNAME...${NC}"
-                    certbot certonly --manual --preferred-challenges dns \
-                        -d "*.$HOSTNAME" -d "*.*.$HOSTNAME" -d "*.*.*.$HOSTNAME" \
-                        --agree-tos --no-eff-email --email "$LETSENCRYPT_EMAIL" --manual-public-ip-logging-ok
-
-                    if [[ $? -eq 0 ]]; then
-                        echo -e "${GREEN}SSL certificates obtained successfully.${NC}"
-                        break
-                    else
-                        echo -e "${RED}Failed to obtain SSL certificates. Please check the requirements and try again.${NC}"
-                        read -p "Would you like to try setting up Let's Encrypt again? (y/n): " -n 1 -r
-                        echo    # Move to a new line
-                        if [[ $REPLY =~ ^[Nn]$ ]]; then
-                            SETUP_LETSENCRYPT="no"
-                            break
-                        else
-                            continue
-                        fi
-                    fi
-                done
-
-                if [[ $SETUP_LETSENCRYPT == "yes" ]]; then
-                    # Copy the certificates to the Nginx certs directory
-                    echo -e "${BLUE}Copying SSL certificates to Nginx certs directory...${NC}"
-                    cp /etc/letsencrypt/live/"$HOSTNAME"/fullchain.pem "$NGINX_CERTS_DIR/fullchain.pem"
-                    cp /etc/letsencrypt/live/"$HOSTNAME"/privkey.pem "$NGINX_CERTS_DIR/privkey.pem"
-
-                    # Modify Nginx configurations to use SSL
-                    echo -e "${BLUE}Updating Nginx configurations for SSL...${NC}"
-
-                    # Update main server block to use SSL certificates
-                    cat <<EOF > "$NGINX_CONF_DIR/main.conf"
-server {
-    listen 443 ssl;
-    server_name $HOSTNAME;
-
-    ssl_certificate /etc/nginx/certs/fullchain.pem;
-    ssl_certificate_key /etc/nginx/certs/privkey.pem;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    location / {
-        proxy_pass http://content-server:4161;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify off;
-    }
-}
-EOF
-
-                    # Ensure redirect from HTTP to HTTPS
-                    cat <<EOF > "$NGINX_CONF_DIR/redirect.conf"
-server {
-    listen 80;
-    server_name $HOSTNAME;
-    return 301 https://\$host\$request_uri;
-}
-EOF
-
-                    echo -e "${GREEN}Nginx configurations updated for SSL.${NC}"
-
-                    # Start Nginx container
-                    echo -e "${BLUE}Starting Nginx container...${NC}"
-                    docker-compose up -d reverse-proxy
-
-                    # Ask if the user wants to set up auto-renewal
-                    echo -e "\n${BLUE}Would you like to set up automatic certificate renewal for Let's Encrypt?${NC}"
-                    read -p "(y/n): " -n 1 -r
-                    echo    # Move to a new line
-
-                    if [[ $REPLY =~ ^[Yy]$ ]]; then
-                        # Set up cron job for certificate renewal
-                        echo -e "${BLUE}Setting up cron job for certificate renewal...${NC}"
-
-                        # Check if crontab exists for the user, create if not
-                        if ! crontab -l >/dev/null 2>&1; then
-                            echo "" | crontab -
-                        fi
-
-                        # Add renewal command to crontab
-                        (crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --manual --preferred-challenges dns --deploy-hook 'docker-compose restart reverse-proxy'") | crontab -
-
-                        echo -e "${GREEN}Automatic certificate renewal has been set up.${NC}"
-                    else
-                        echo -e "${YELLOW}Skipping automatic certificate renewal setup.${NC}"
-                    fi
-
-                    echo -e "${GREEN}Let's Encrypt SSL setup complete.${NC}"
-                fi
-            else
-                SETUP_LETSENCRYPT="no"
-            fi
-        else
-            # If hostname is not set, create a default server block without SSL
-            cat <<EOF > "$NGINX_CONF_DIR/default.conf"
+        echo_color "green" "Nginx server blocks for hostname and encoded IDs created."
+    else
+        # If hostname is not set, create a default server block without SSL
+        cat <<EOF > "$NGINX_CONF_DIR/default.conf"
 server {
     listen 80 default_server;
     server_name _;
@@ -325,22 +272,102 @@ server {
         proxy_pass http://content-server:4161;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_ssl_certificate /etc/nginx/certs/client.crt;
-        proxy_ssl_certificate_key /etc/nginx/certs/client.key;
-        proxy_ssl_trusted_certificate /etc/nginx/certs/chia_ca.crt;
-        proxy_ssl_verify off;
     }
 }
 EOF
 
-            echo -e "${GREEN}Default Nginx server block written to $NGINX_CONF_DIR/default.conf${NC}"
+        echo_color "green" "Default Nginx server block without SSL created."
+    fi
+
+    # Create Docker Compose File if it doesn't exist
+    if [[ ! -f "$DOCKER_COMPOSE_FILE" ]]; then
+        echo_color "blue" "Creating Docker Compose file..."
+        cat <<EOF > "$DOCKER_COMPOSE_FILE"
+version: '3.8'
+
+services:
+  reverse-proxy:
+    image: nginx:latest
+    container_name: reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "$NGINX_CONF_DIR:/etc/nginx/conf.d"
+      - "$NGINX_CERTS_DIR:/etc/nginx/certs"
+      - "$NGINX_LUA_DIR:/etc/nginx/lua"
+    depends_on:
+      - content-server
+
+  content-server:
+    image: your-content-server-image
+    container_name: content-server
+    restart: unless-stopped
+    # Add your content server configurations here
+EOF
+        echo_color "green" "Docker Compose file created at $DOCKER_COMPOSE_FILE."
+    else
+        echo_color "yellow" "Docker Compose file already exists at $DOCKER_COMPOSE_FILE. Skipping creation."
+    fi
+
+    # Handle SSL Certificates
+    echo_color "blue" "Setting up SSL certificates..."
+
+    # Prompt user to choose between Let's Encrypt or Self-Signed
+    echo_color "blue" "Choose SSL certificate option:"
+    echo "1. Let's Encrypt (Recommended for production)"
+    echo "2. Self-Signed Certificate (For development/testing)"
+    read -p "Enter your choice (1 or 2): " SSL_OPTION
+
+    if [[ "$SSL_OPTION" == "1" ]]; then
+        # Set up Let's Encrypt using certbot
+        echo_color "blue" "Setting up Let's Encrypt SSL certificates for $HOSTNAME..."
+
+        # Ensure certbot is installed
+        if ! command -v certbot &> /dev/null; then
+            echo_color "red" "certbot could not be found. Please install certbot and rerun the script."
+            exit 1
         fi
 
-        # Restart Docker container to apply changes
-        echo -e "${BLUE}Restarting reverse-proxy container...${NC}"
-        docker-compose restart reverse-proxy
+        # Obtain SSL certificates
+        certbot certonly --manual --preferred-challenges dns \
+            -d "*.$HOSTNAME" \
+            -d "$HOSTNAME" \
+            --agree-tos --no-eff-email --email "youremail@example.com" --manual-public-ip-logging-ok
+
+        # Check if certbot was successful
+        if [[ $? -ne 0 ]]; then
+            echo_color "red" "Failed to obtain SSL certificates with Let's Encrypt."
+            exit 1
+        fi
+
+        # Copy certificates to Nginx certs directory
+        cp /etc/letsencrypt/live/"$HOSTNAME"/fullchain.pem "$NGINX_CERTS_DIR/fullchain.pem"
+        cp /etc/letsencrypt/live/"$HOSTNAME"/privkey.pem "$NGINX_CERTS_DIR/privkey.pem"
+
+        echo_color "green" "Let's Encrypt SSL certificates obtained and copied."
+    elif [[ "$SSL_OPTION" == "2" ]]; then
+        # Generate Self-Signed Certificates
+        echo_color "blue" "Generating self-signed SSL certificates for $HOSTNAME..."
+
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$NGINX_CERTS_DIR/privkey.pem" \
+            -out "$NGINX_CERTS_DIR/fullchain.pem" \
+            -subj "/CN=$HOSTNAME"
+
+        echo_color "green" "Self-signed SSL certificates generated."
+    else
+        echo_color "red" "Invalid choice for SSL certificate option. Exiting."
+        exit 1
     fi
+
+    # Inform user about setting up Docker Compose
+    echo_color "blue" "Starting Docker Compose services..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+
+    echo_color "green" "Nginx reverse proxy setup complete and running."
 }
 
-# Call the function
+# Execute the setup function
 nginx_setup
