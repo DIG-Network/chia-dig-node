@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Exit immediately if a command exits with a non-zero status
-set -e
-
 # Function to display messages in color
 function echo_color() {
     local color="$1"
@@ -368,6 +365,3 @@ EOF
 
     echo_color "green" "Nginx reverse proxy setup complete and running."
 }
-
-# Execute the setup function
-nginx_setup
