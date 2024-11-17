@@ -311,6 +311,3 @@ EOF
 
     echo_color "green" "Nginx reverse proxy setup complete and running."
 }
-
-# Execute the setup function
-nginx_setup
