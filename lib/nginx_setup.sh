@@ -23,6 +23,35 @@ function echo_color() {
     esac
 }
 
+# Function to check for ACME TXT record
+function check_acme_challenge() {
+    local domain="$1"
+    local token="$2"
+    local timeout="$3"
+    local interval="$4"
+    local elapsed=0
+
+    echo_color "yellow" "Waiting for DNS propagation of ACME challenge..."
+    while [ $elapsed -lt $timeout ]; do
+        # Query the TXT record for _acme-challenge.domain
+        local txt_records
+        txt_records=$(dig TXT +short "_acme-challenge.$domain")
+
+        # Check if the token is present in the TXT records
+        if echo "$txt_records" | grep -q "$token"; then
+            echo_color "green" "ACME challenge TXT record detected."
+            return 0
+        fi
+
+        sleep $interval
+        elapsed=$((elapsed + interval))
+        echo_color "yellow" "ACME challenge TXT record not found yet. Checking again in $interval seconds..."
+    done
+
+    echo_color "red" "Timeout reached. ACME challenge TXT record not detected."
+    return 1
+}
+
 # Main setup function
 nginx_setup() {
     # Define user home directory
@@ -133,7 +162,7 @@ function Decoder.decode(encodedId)
     -- Extract chain_length (1 byte)
     local chain_length = string.byte(decodedData:sub(1,1))
 
-    -- Define the expected total length
+    # Define the expected total length
     local expected_length = 1 + chain_length + STORE_ID_LENGTH
     if #decodedData ~= expected_length then
         return nil, "Decoded data length mismatch. Expected " .. expected_length .. " bytes, got " .. #decodedData .. " bytes."
@@ -318,6 +347,10 @@ EOF
     read -p "Enter your choice (1 or 2): " SSL_OPTION
 
     if [[ "$SSL_OPTION" == "1" ]]; then
+        # Prompt for email address
+        echo_color "blue" "Please enter your email address for Let's Encrypt notifications:"
+        read -p "Email: " LETSENCRYPT_EMAIL
+
         # Set up Let's Encrypt using certbot
         echo_color "blue" "Setting up Let's Encrypt SSL certificates for $HOSTNAME..."
 
@@ -327,23 +360,67 @@ EOF
             exit 1
         fi
 
-        # Obtain SSL certificates
+        # Obtain SSL certificates with DNS-01 challenge
+        echo_color "blue" "Starting Let's Encrypt DNS-01 challenge setup..."
         certbot certonly --manual --preferred-challenges dns \
             -d "*.$HOSTNAME" \
             -d "$HOSTNAME" \
-            --agree-tos --no-eff-email --email "youremail@example.com" --manual-public-ip-logging-ok
+            --agree-tos --no-eff-email --email "$LETSENCRYPT_EMAIL" --manual-public-ip-logging-ok
 
-        # Check if certbot was successful
-        if [[ $? -ne 0 ]]; then
-            echo_color "red" "Failed to obtain SSL certificates with Let's Encrypt."
-            exit 1
-        fi
+        # Extract the DNS TXT token for _acme-challenge.$HOSTNAME
+        # Note: Certbot does not provide an easy way to extract the token programmatically
+        # Therefore, we'll prompt the user to input the token manually
+        echo_color "yellow" "Please provide the DNS TXT record value for _acme-challenge.$HOSTNAME:"
+        read -p "ACME Challenge Token: " ACME_TOKEN
+
+        # Function to check DNS TXT record
+        check_acme_challenge "$HOSTNAME" "$ACME_TOKEN" 600 30  # 10 minutes timeout, check every 30 seconds
+
+        # Start a loop to check for the ACME challenge
+        echo_color "blue" "Verifying ACME challenge DNS TXT record..."
+        MAX_ATTEMPTS=20
+        INTERVAL=30  # seconds
+        ATTEMPT=1
+        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            # Query the TXT record
+            TXT_RECORD=$(dig TXT +short "_acme-challenge.$HOSTNAME")
+
+            # Check if the token is present
+            if echo "$TXT_RECORD" | grep -q "$ACME_TOKEN"; then
+                echo_color "green" "ACME challenge TXT record detected."
+                break
+            else
+                echo_color "yellow" "ACME challenge TXT record not found. Attempt $ATTEMPT/$MAX_ATTEMPTS."
+                sleep $INTERVAL
+                ATTEMPT=$((ATTEMPT + 1))
+            fi
+
+            if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+                echo_color "red" "ACME challenge verification failed after $MAX_ATTEMPTS attempts."
+                exit 1
+            fi
+        done
 
         # Copy certificates to Nginx certs directory
+        echo_color "blue" "Copying SSL certificates to Nginx certs directory..."
         cp /etc/letsencrypt/live/"$HOSTNAME"/fullchain.pem "$NGINX_CERTS_DIR/fullchain.pem"
         cp /etc/letsencrypt/live/"$HOSTNAME"/privkey.pem "$NGINX_CERTS_DIR/privkey.pem"
 
         echo_color "green" "Let's Encrypt SSL certificates obtained and copied."
+
+        # Optionally, set up automatic renewal
+        echo_color "blue" "Would you like to set up automatic certificate renewal for Let's Encrypt? (y/n)"
+        read -p "(y/n): " -n 1 -r
+        echo    # Move to a new line
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo_color "blue" "Setting up cron job for automatic certificate renewal..."
+            # Add renewal command to crontab
+            (crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --manual --preferred-challenges dns --manual-public-ip-logging-ok && docker-compose -f $DOCKER_COMPOSE_FILE restart reverse-proxy") | crontab -
+            echo_color "green" "Automatic certificate renewal has been set up."
+        else
+            echo_color "yellow" "Skipping automatic certificate renewal setup."
+        fi
     elif [[ "$SSL_OPTION" == "2" ]]; then
         # Generate Self-Signed Certificates
         echo_color "blue" "Generating self-signed SSL certificates for $HOSTNAME..."
