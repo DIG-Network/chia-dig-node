@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+
 
 # Function to display messages in color
 function echo_color() {
@@ -21,35 +21,6 @@ function echo_color() {
             echo "${message}"
             ;;
     esac
-}
-
-# Function to check for ACME TXT record
-function check_acme_challenge() {
-    local domain="$1"
-    local token="$2"
-    local timeout="$3"
-    local interval="$4"
-    local elapsed=0
-
-    echo_color "yellow" "Waiting for DNS propagation of ACME challenge..."
-    while [ $elapsed -lt $timeout ]; do
-        # Query the TXT record for _acme-challenge.domain
-        local txt_records
-        txt_records=$(dig TXT +short "_acme-challenge.$domain")
-
-        # Check if the token is present in the TXT records
-        if echo "$txt_records" | grep -q "$token"; then
-            echo_color "green" "ACME challenge TXT record detected."
-            return 0
-        fi
-
-        sleep $interval
-        elapsed=$((elapsed + interval))
-        echo_color "yellow" "ACME challenge TXT record not found yet. Checking again in $interval seconds..."
-    done
-
-    echo_color "red" "Timeout reached. ACME challenge TXT record not detected."
-    return 1
 }
 
 # Main setup function
@@ -83,127 +54,86 @@ nginx_setup() {
     mkdir -p "$NGINX_CERTS_DIR"
     mkdir -p "$NGINX_LUA_DIR"
 
-    # Create Lua Base62 Encoder/Decoder Module
-    echo_color "blue" "Creating Lua Base62 module..."
-    cat <<'EOF' > "$NGINX_LUA_DIR/base62.lua"
--- base62.lua
-local Base62 = {}
-Base62.__index = Base62
-
-local charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-function Base62.encode(data)
-    local number = 0
-    for i = 1, #data do
-        number = number * 256 + data:byte(i)
-    end
-
-    local encoded = ""
-    local base = 62
-    while number > 0 do
-        local remainder = number % base
-        number = math.floor(number / base)
-        encoded = charset:sub(remainder + 1, remainder + 1) .. encoded
-    end
-
-    return encoded
-end
-
-function Base62.decode(str)
-    local number = 0
-    local base = 62
-
-    for i = 1, #str do
-        local char = str:sub(i, i)
-        local index = string.find(charset, char, 1, true)
-        if not index then
-            return nil, "Invalid character '" .. char .. "' in Base62 string"
-        end
-        number = number * base + (index - 1)
-    end
-
-    -- Convert the big integer back to binary data
-    local bytes = {}
-    while number > 0 do
-        local byte = number % 256
-        number = math.floor(number / 256)
-        table.insert(bytes, 1, string.char(byte))
-    end
-
-    return table.concat(bytes)
-end
-
-return Base62
-EOF
-    echo_color "green" "Lua Base62 module created."
-
     # Create Lua Decoder Module (Simplified, Reversible ID without HMAC)
     echo_color "blue" "Creating Lua Decoder module..."
-    cat <<'EOF' > "$NGINX_LUA_DIR/decoder.lua"
--- decoder.lua
-local Base62 = require("base62")
+cat > "$BASE_DIR/.nginx/lua/subdomain_decoder.lua" << 'EOL'
+local baseX = require "baseX"
 
-local Decoder = {}
-Decoder.__index = Decoder
+local SubDomainDecoder = {}
 
-function Decoder.decode(encodedId)
-    -- Decode the Base62 string back to binary data
-    local decodedData, err = Base62.decode(encodedId)
-    if not decodedData then
-        return nil, "Failed to decode Base62: " .. err
+-- Define the Base62 character set
+local BASE62_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+local STORE_ID_LENGTH = 32
+
+local base62 = baseX.new(BASE62_CHARSET)
+
+function SubDomainDecoder.decode(encodedId)
+    if not encodedId then
+        return nil, "Invalid encodedId: encodedId must be a non-empty string"
     end
 
-    -- Ensure there's at least 1 byte for chain_length and STORE_ID_LENGTH bytes for storeId
-    local STORE_ID_LENGTH = 32 -- bytes
-    if #decodedData < (1 + STORE_ID_LENGTH) then
-        return nil, "Decoded data is too short to contain required fields."
+    -- Decode the Base62 string
+    local decoded = base62:decode(encodedId)
+    if not decoded then
+        return nil, "Failed to decode Base62 string"
     end
 
-    -- Extract chain_length (1 byte)
-    local chain_length = string.byte(decodedData:sub(1,1))
-
-    # Define the expected total length
-    local expected_length = 1 + chain_length + STORE_ID_LENGTH
-    if #decodedData ~= expected_length then
-        return nil, "Decoded data length mismatch. Expected " .. expected_length .. " bytes, got " .. #decodedData .. " bytes."
+    -- Extract chain length (first byte)
+    local chain_length = string.byte(decoded, 1)
+    
+    -- Validate minimum length
+    if #decoded < (1 + chain_length + STORE_ID_LENGTH) then
+        return nil, "Decoded data is too short"
     end
 
-    -- Extract chain and storeId
-    local chain = decodedData:sub(2, 1 + chain_length)
-    local storeId = decodedData:sub(2 + chain_length, 1 + chain_length + STORE_ID_LENGTH)
-
-    -- Convert storeId binary to hex string
-    local storeIdHex = storeId:gsub(".", function(c)
-        return string.format("%02x", string.byte(c))
-    end)
+    -- Extract chain
+    local chain = string.sub(decoded, 2, 1 + chain_length)
+    
+    -- Extract storeId (as raw bytes)
+    local storeId_raw = string.sub(decoded, 2 + chain_length, 1 + chain_length + STORE_ID_LENGTH)
+    
+    -- Convert storeId to hex
+    local storeId = ""
+    for i = 1, #storeId_raw do
+        storeId = storeId .. string.format("%02x", string.byte(storeId_raw, i))
+    end
 
     return {
         chain = chain,
-        storeId = storeIdHex
+        storeId = storeId
     }
 end
 
-return Decoder
-EOF
-    echo_color "green" "Lua Decoder module created."
+return SubDomainDecoder
+EOL
 
     # Create Main Nginx Configuration
     echo_color "blue" "Creating main Nginx configuration..."
     cat <<EOF > "$NGINX_MAIN_CONF"
 worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
 
 events {
     worker_connections 1024;
 }
 
 http {
-    lua_package_path "/etc/nginx/lua/?.lua;;";
-    lua_shared_dict base32_cache 10m;
-
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    
+    access_log /var/log/nginx/access.log main;
+    
+    sendfile on;
+    keepalive_timeout 65;
+    
+    lua_package_path "/usr/local/openresty/nginx/lua/?.lua;;";
+    
     include /etc/nginx/conf.d/*.conf;
-
-    sendfile        on;
-    keepalive_timeout  65;
 }
 EOF
     echo_color "green" "Main Nginx configuration created."
@@ -241,47 +171,34 @@ server {
 }
 EOF
 
-    # Encoded subdomain server block
-    cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
-server {
-    listen 443 ssl;
-    server_name ~^(?<encodedId>[A-Za-z0-9]{1,63})\.$HOSTNAME$;
-
-    ssl_certificate /etc/nginx/certs/fullchain.pem;
-    ssl_certificate_key /etc/nginx/certs/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+        # Encoded subdomain server block
+        cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
+sserver {
+    listen 80;
+    server_name ~^(?<subdomain>[^.]+)\.yourdomain\.com$;
 
     location / {
-        # Decode the encodedId to retrieve chain and storeId
         access_by_lua_block {
-            local Decoder = require("decoder")
-            local encodedId = ngx.var.encodedId
-
-            if not encodedId then
-                ngx.log(ngx.ERR, "No encodedId provided")
+            local subdomain_decoder = require "subdomain_decoder"
+            local decoded, err = subdomain_decoder.decode(ngx.var.subdomain)
+            
+            if err then
+                ngx.status = 400
+                ngx.say("Invalid subdomain format: " .. err)
                 ngx.exit(ngx.HTTP_BAD_REQUEST)
             end
-
-            -- Decode the encodedId using Decoder module
-            local decoded, err = Decoder.decode(encodedId)
-            if not decoded then
-                ngx.log(ngx.ERR, "Failed to decode encodedId: " .. err)
-                ngx.exit(ngx.HTTP_BAD_REQUEST)
-            end
-
-            local chain = decoded.chain
-            local storeId = decoded.storeId
-
-            -- Set variables for use in proxy_pass
-            ngx.var.chain = chain
-            ngx.var.storeId = storeId
+            
+            -- Store the decoded values in nginx variables for use in proxy_pass
+            ngx.var.chain = decoded.chain
+            ngx.var.store_id = decoded.storeId
         }
 
-        # Proxy to content server with chain and storeId as query parameters
-        proxy_pass http://content-server:4161/urn:dig:\$chain:\$storeId\$request_uri;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
+        # Proxy to your content server with the decoded information
+        proxy_pass http://content-server:3000/store/$store_id/chain/$chain;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 EOF
@@ -347,10 +264,6 @@ EOF
     read -p "Enter your choice (1 or 2): " SSL_OPTION
 
     if [[ "$SSL_OPTION" == "1" ]]; then
-        # Prompt for email address
-        echo_color "blue" "Please enter your email address for Let's Encrypt notifications:"
-        read -p "Email: " LETSENCRYPT_EMAIL
-
         # Set up Let's Encrypt using certbot
         echo_color "blue" "Setting up Let's Encrypt SSL certificates for $HOSTNAME..."
 
@@ -360,67 +273,23 @@ EOF
             exit 1
         fi
 
-        # Obtain SSL certificates with DNS-01 challenge
-        echo_color "blue" "Starting Let's Encrypt DNS-01 challenge setup..."
+        # Obtain SSL certificates
         certbot certonly --manual --preferred-challenges dns \
             -d "*.$HOSTNAME" \
             -d "$HOSTNAME" \
-            --agree-tos --no-eff-email --email "$LETSENCRYPT_EMAIL" --manual-public-ip-logging-ok
+            --agree-tos --no-eff-email --email "youremail@example.com" --manual-public-ip-logging-ok
 
-        # Extract the DNS TXT token for _acme-challenge.$HOSTNAME
-        # Note: Certbot does not provide an easy way to extract the token programmatically
-        # Therefore, we'll prompt the user to input the token manually
-        echo_color "yellow" "Please provide the DNS TXT record value for _acme-challenge.$HOSTNAME:"
-        read -p "ACME Challenge Token: " ACME_TOKEN
-
-        # Function to check DNS TXT record
-        check_acme_challenge "$HOSTNAME" "$ACME_TOKEN" 600 30  # 10 minutes timeout, check every 30 seconds
-
-        # Start a loop to check for the ACME challenge
-        echo_color "blue" "Verifying ACME challenge DNS TXT record..."
-        MAX_ATTEMPTS=20
-        INTERVAL=30  # seconds
-        ATTEMPT=1
-        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            # Query the TXT record
-            TXT_RECORD=$(dig TXT +short "_acme-challenge.$HOSTNAME")
-
-            # Check if the token is present
-            if echo "$TXT_RECORD" | grep -q "$ACME_TOKEN"; then
-                echo_color "green" "ACME challenge TXT record detected."
-                break
-            else
-                echo_color "yellow" "ACME challenge TXT record not found. Attempt $ATTEMPT/$MAX_ATTEMPTS."
-                sleep $INTERVAL
-                ATTEMPT=$((ATTEMPT + 1))
-            fi
-
-            if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
-                echo_color "red" "ACME challenge verification failed after $MAX_ATTEMPTS attempts."
-                exit 1
-            fi
-        done
+        # Check if certbot was successful
+        if [[ $? -ne 0 ]]; then
+            echo_color "red" "Failed to obtain SSL certificates with Let's Encrypt."
+            exit 1
+        fi
 
         # Copy certificates to Nginx certs directory
-        echo_color "blue" "Copying SSL certificates to Nginx certs directory..."
         cp /etc/letsencrypt/live/"$HOSTNAME"/fullchain.pem "$NGINX_CERTS_DIR/fullchain.pem"
         cp /etc/letsencrypt/live/"$HOSTNAME"/privkey.pem "$NGINX_CERTS_DIR/privkey.pem"
 
         echo_color "green" "Let's Encrypt SSL certificates obtained and copied."
-
-        # Optionally, set up automatic renewal
-        echo_color "blue" "Would you like to set up automatic certificate renewal for Let's Encrypt? (y/n)"
-        read -p "(y/n): " -n 1 -r
-        echo    # Move to a new line
-
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo_color "blue" "Setting up cron job for automatic certificate renewal..."
-            # Add renewal command to crontab
-            (crontab -l 2>/dev/null; echo "0 0 * * * certbot renew --manual --preferred-challenges dns --manual-public-ip-logging-ok && docker-compose -f $DOCKER_COMPOSE_FILE restart reverse-proxy") | crontab -
-            echo_color "green" "Automatic certificate renewal has been set up."
-        else
-            echo_color "yellow" "Skipping automatic certificate renewal setup."
-        fi
     elif [[ "$SSL_OPTION" == "2" ]]; then
         # Generate Self-Signed Certificates
         echo_color "blue" "Generating self-signed SSL certificates for $HOSTNAME..."
@@ -442,3 +311,6 @@ EOF
 
     echo_color "green" "Nginx reverse proxy setup complete and running."
 }
+
+# Execute the setup function
+nginx_setup
