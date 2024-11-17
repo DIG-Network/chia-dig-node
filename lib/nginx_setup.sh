@@ -241,8 +241,8 @@ server {
 }
 EOF
 
-        # Encoded subdomain server block
-        cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
+    # Encoded subdomain server block
+    cat <<EOF > "$NGINX_CONF_DIR/encoded.conf"
 server {
     listen 443 ssl;
     server_name ~^(?<encodedId>[A-Za-z0-9]{1,63})\.$HOSTNAME$;
@@ -279,9 +279,9 @@ server {
         }
 
         # Proxy to content server with chain and storeId as query parameters
-        proxy_pass http://content-server:4161/?chain=$chain&storeId=$storeId$request_uri;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        proxy_pass http://content-server:4161/urn:dig:\$chain:\$storeId\$request_uri;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
     }
 }
 EOF
