@@ -13,6 +13,18 @@ nginx_setup() {
         mkdir -p "$NGINX_CONF_DIR"
         mkdir -p "$NGINX_CERTS_DIR"
 
+    echo -e "\e[34mSetting up Nginx decoder configuration...\e[0m"
+
+    # Create necessary directories (force create if they exist)
+    echo -e "\e[34mCleaning up existing configuration...\e[0m"
+    rm -rf "$BASE_DIR/.nginx"
+    rm -f "$BASE_DIR/docker-compose.yml"
+    rm -rf "$BASE_DIR/docker"
+
+    echo -e "\e[34mCreating directory structure...\e[0m"
+    mkdir -p "$BASE_DIR/.nginx/"{conf.d,lua,logs}
+    mkdir -p "$BASE_DIR/docker"
+
             # Create main Nginx configuration
     echo -e "\e[34mCreating main Nginx configuration...\e[0m"
     rm -f "$BASE_DIR/.nginx/nginx.conf"
