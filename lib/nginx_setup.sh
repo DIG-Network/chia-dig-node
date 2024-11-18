@@ -396,7 +396,7 @@ EOF
     cat <<'EOF' > "$BASE_DIR/.nginx/conf.d/encoded.conf"
 server {
     listen 80;
-    server_name "~^(?<encodedId>[0-9a-z]+)\.dig\.host$" ;
+    server_name "~^(?<encodedId>[0-9a-z]+)\.$(echo "$HOSTNAME" | sed 's/\./\\./g')\$" ;
 
     location / {
         access_by_lua_block {
