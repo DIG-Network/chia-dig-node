@@ -186,12 +186,10 @@ EOF
       - $USER_HOME/.dig/remote/.nginx/conf.d:/etc/nginx/conf.d
       - $USER_HOME/.dig/remote/.nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - $USER_HOME/.dig/remote/.nginx/certs:/etc/nginx/certs
-      - $USER_HOME/.dig/remote/.nginx/lua:/usr/local/openresty/nginx/lua
-
     logging:
       options:
         max-size: "10m"
-        max-file: 7
+        max-file: "7"
     depends_on:
       - content-server
     networks:
